@@ -13,9 +13,13 @@ import omni.replicator.core as rep
 
 from Env.Robot.Franka.MyFranka import MyFranka
 from Env.Garment.Garment import Garment
-from Env.Config import FrankaConfig, GarmentConfig, DeformableConfig, SceneConfig
+from Env.Config.SceneConfig import SceneConfig
+from Env.Config.FrankaConfig import FrankaConfig
+from Env.Config.DeformableConfig import DeformableConfig
+from Env.Config.GarmentConfig import GarmentConfig
 from Env.Utils.transforms import euler_angles_to_quat
-
+from Env.Camera.Recording_Camera import Recording_Camera
+from Control.Control import Control
 
 ###############################################################################
 # 环境基类，封装场景、物理、资源加载以及灯光配置
@@ -79,7 +83,7 @@ class BaseEnv:
             prim_path="/World/recording_camera",
         )
 
-    def import_room(self, scene_config: SceneConfig):
+    def import_room(self, scene_config: SceneConfig):  # FlatGrid.usd
         """加载房间/场景背景"""
         room_prim_path = find_unique_string_name("/World/Room/room", is_unique_fn=lambda x: not is_prim_path_valid(x))
         room_name = find_unique_string_name(initial_name="room", is_unique_fn=lambda x: not self.world.scene.object_exists(x))

@@ -1,5 +1,7 @@
+from Env.Config.GarmentConfig import GarmentConfig
 import carb
 from isaacsim import SimulationApp
+import numpy as np
 
 # 启动 Isaac Sim 仿真环境（非无头模式，可根据需要修改参数）
 simulation_app = SimulationApp({"headless": False})
@@ -13,30 +15,45 @@ from Env.env.BaseEnv import BaseEnv
 ###############################################################################
 if __name__ == "__main__":
 
-    # 创建环境实例（加载房间、默认地面、灯光等）
-    env = BaseEnv()
+    garment_config=GarmentConfig(
+        usd_path="/home/pakwa/GarmentLab/Assets/Garment/Tops/NoCollar_Lsleeve_FrontClose/TNLC_Dress057/TNLC_Dress057_obj.usd",
+        pos=np.array([0,-0.95,0.3]),ori=np.array([0,0,0]),particle_contact_offset=0.01)
     
-    try:    
-        # 示例：加载 Franka 机器人（请确保 FrankaConfig 配置正确）
-        # 若 FrankaConfig 配置为：franka_num=1, pos=[np.array([...])], ori=[np.array([...])]
-        franka_config = FrankaConfig()  # 请根据需要初始化配置
-        franka_list = env.import_franka(franka_config)
+    franka_config=FrankaConfig(ori=[np.array([0,0,-np.pi/2])])
 
-        # 示例：加载衣物资源（请替换为您实际的衣物 USD 路径）
-        garment_usd_path = "/home/pakwa/GarmentLab/Assets/Garment/Dress/Long_ShortSleeve/DLSS_Dress182/DLSS_Dress182_obj.usd"
-        env.import_garment(garment_usd_path)
+    env = BaseEnv(garment_config=[garment_config],
+                franka_config=franka_config,)
 
-        # 重置环境
-        env.reset()
-        carb.log_info("环境初始化完成，开始仿真。")
+    env.reset()
+    carb.log_info("环境初始化完成，开始仿真。")
 
-        # 主仿真循环（建议设置退出条件或按键监听）
-        while simulation_app.is_running():
+
+    env.control.robot_reset()
+    env.control.grasp([np.array([0.35282,-0.26231,0.02])],[None],[True])
+
+    # env.control.move([np.array([0.28138,-0.26231,0.22])],[None],[True])
+    env.control.move([np.array([0.1,-0.26231,0.22])],[None],[True])
+    env.control.move([np.array([-0.12,-0.26231,0.1])],[None],[True])
+    env.control.ungrasp([False],)
+    env.control.grasp([np.array([-0.377,-0.26231,0.02])],[None],[True])
+
+    # env.control.move([np.array([-0.3,-0.26231,0.22])],[None],[True])
+    env.control.move([np.array([0.0,-0.26231,0.22])],[None],[True])
+    env.control.move([np.array([0.07,-0.26231,0.03])],[None],[True])
+    env.control.ungrasp([False],)
+
+    env.control.grasp([np.array([0.0,-0.65,0.015])],[None],[True])
+
+    env.control.move([np.array([-0.0,-0.515,0.22])],[None],[True])
+    env.control.move([np.array([0.0,-0.25,0.05])],[None],[True])
+
+    env.control.ungrasp([True],)
+
+    env.control.robot_goto_position([np.array([-0.0,-0.566,0.22])],[None],[True])
+
+
+    while simulation_app.is_running():
             env.step()
-    except KeyboardInterrupt:
-        carb.log_info("检测到中断信号，停止仿真。")
-    except Exception as e:
-        carb.log_error(f"仿真过程中出现错误：{e}")
-    finally:
-        env.stop()
-        simulation_app.close()
+    
+    env.stop()
+    simulation_app.close()

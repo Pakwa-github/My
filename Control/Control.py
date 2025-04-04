@@ -127,7 +127,7 @@ class Control:
         self.garment=garment
         # assert len(self.robot)==len(self.garment), "The number of robot and garment must be the same"
         self.stage=self.world.stage
-        self.grasp_offset=torch.tensor([0.,0.,-0.01]) # why
+        self.grasp_offset=torch.tensor([0.,0.,-0.01]) # why 向上一点点夹？
         self.rigid=rigid
         # 设置碰撞组关系，确保不同类型的对象之间有合适的碰撞过滤规则。
         self.collision_group()  
@@ -302,7 +302,7 @@ class Control:
         self.attach(target_garment,flag)
         self.world.play()
         for i in range(30):
-            self.world.step()
+            self.world.step()  # 等待系统稳定，让物理计算充分传播和收敛
         self.robot_close(flag)
 
     def move(self,pos:list,ori:list,flag:list[bool],max_limit=300):
@@ -320,17 +320,20 @@ class Control:
             for id in range(len(self.robot)):
                 if not flag[id]:
                     continue
-                robot_pos,robot_ori=self.robot[id].get_cur_ee_pos()
+                robot_pos,robot_ori=self.robot[id].get_cur_ee_pos()  # 末端执行器
                 # print(robot_pos)
+                # 将位姿转化为torch张量
                 if isinstance(robot_pos,np.ndarray):
                     robot_pos=torch.from_numpy(robot_pos)
                 if isinstance(robot_ori,np.ndarray):
                     robot_ori=torch.from_numpy(robot_ori)
-                a=self.Rotation(robot_ori,self.grasp_offset)
+                a=self.Rotation(robot_ori,self.grasp_offset)  # 向Z轴偏移一点
+
                 block_handle:AttachmentBlock=self.attachlist[id]
                 block_cur_pos=block_handle.get_position()
                 # block_cur_pos=torch.from_numpy(block_cur_pos)
                 block_next_pos=robot_pos+a
+                # 获取对应附件块当前位置，计算目标位置和所需速度（基于物理时间步长和放大因子 3）
                 block_velocity=(block_next_pos-block_cur_pos)/(self.world.get_physics_dt()*3)
                 # if torch.norm(block_cur_pos-block_next_pos)<0.01:
                 #     block_velocity=torch.zeros_like(block_velocity)
@@ -351,11 +354,13 @@ class Control:
             if all_reach_flag or cur_step>max_limit:
                 cmd=torch.zeros(6,)
                 for id in range(len(self.robot)):
-                    if not flag[id]:
+                    if not flag[id]:  # 如果机器人没有抓取，则跳过
                         continue
                     block_handle:AttachmentBlock=self.attachlist[id]
+                    # 检测是否到达目标位置或超出最大步数，若满足条件则停止附件块运动。
                     block_handle.set_velocities(cmd)
                 break
+
     def ungrasp(self,flag, keep=None):
         '''
         ungrasp function
@@ -370,6 +375,7 @@ class Control:
                     self.attachlist[i].detach()
                     self.attachlist[i]=None
                 else:
+                    # 需要保留附件则恢复重力，然后清除附件引用
                     self.attachlist[i].move_block_controller.enable_gravities()
                     self.attachlist[i]=None
 

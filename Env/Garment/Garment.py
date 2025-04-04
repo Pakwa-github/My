@@ -2,7 +2,7 @@ import numpy as np
 from omni.isaac.core import World
 from omni.isaac.core.materials.particle_material import ParticleMaterial
 from omni.isaac.core.prims.soft.cloth_prim import ClothPrim
-from omni.isaac.core.prims.soft.cloth_prim_view import ClothPrimView
+# from omni.isaac.core.prims.soft.cloth_prim_view import ClothPrimView  # 弃用
 from omni.isaac.core.prims.soft.particle_system import ParticleSystem
 from omni.isaac.core.utils.nucleus import get_assets_root_path
 from pxr import Gf, UsdGeom,Sdf, UsdPhysics, PhysxSchema, UsdLux, UsdShade
@@ -45,9 +45,8 @@ class Garment:
                 solver_position_iteration_count=self.garment_config.solver_position_iteration_count,
             )
         else:
-            self.particle_system_path = particle_system.prim_path
             self.particle_system = particle_system
-            self.particle_system=particle_system
+            self.particle_system_path = particle_system.prim_path
             self.particle_system.set_global_self_collision_enabled(self.garment_config.global_self_collision_enabled)
             self.particle_system.set_solver_position_iteration_count(self.garment_config.solver_position_iteration_count)
 
@@ -84,6 +83,9 @@ class Garment:
         self.particle_system_api=PhysxSchema.PhysxParticleAPI.Apply(self.particle_system.prim)
         return self.particle_system_api.GetParticleGroupAttr().Get()
 
+    def get_vertice_positions(self):
+        return self.garment_mesh._get_points_pose()
+    
     def get_vertices_positions(self):
         return self.garment_mesh._get_points_pose()
 
@@ -109,9 +111,6 @@ class Garment:
             for prim in self.garment_submesh:
                 omni.kit.commands.execute('BindMaterialCommand',
                 prim_path=prim.GetPath(), material_path=self.material_prim_path)
-
-    def get_vertice_positions(self):
-        return self.garment_mesh._get_points_pose()
 
     def set_pose(self, pos, ori):
         self.garment.set_world_pose(position=pos, orientation=ori)
