@@ -221,7 +221,7 @@ class Control:
                 self.attachlist[i].block_control.disable_gravities()
 
 
-    def robot_goto_position(self,pos:list,ori:list,flag:list[bool],max_limit=10000):
+    def robot_goto_position(self,pos:list,ori:list,flag:list[bool],max_limit=300):
         cur_step=0
         self.world.step()
         while 1:
@@ -272,8 +272,6 @@ class Control:
 
 
 
-
-
     def grasp(self,pos:list,ori:list,flag:list[bool],assign_garment = None):
         '''
         grasp_function
@@ -298,12 +296,15 @@ class Control:
             target_garment = [self.garment[assign_garment]]
         self.robot_goto_position(pos,ori,flag)
         self.world.pause()
+        print("goto over")
         self.make_attachment(pos,flag)
         self.attach(target_garment,flag)
+        print("attach over")
         self.world.play()
         for i in range(30):
             self.world.step()  # 等待系统稳定，让物理计算充分传播和收敛
         self.robot_close(flag)
+        print("close over")
 
     def move(self,pos:list,ori:list,flag:list[bool],max_limit=300):
         '''

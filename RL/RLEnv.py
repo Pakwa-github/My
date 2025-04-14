@@ -82,7 +82,7 @@ class RlEnvBase(gym.Env):
     def signal_handler(self, sig, frame):
         self.close()
 
-    def set_task(self, task, garment_config, backend="numpy", sim_params=None, init_sim=True, rendering_dt=1.0 / 60.0, example = False) -> None:
+    def set_task(self, task, backend="numpy", sim_params=None, init_sim=True, rendering_dt=1.0 / 60.0, example = False) -> None:
         """Creates a World object and adds Task to World.
             Initializes and registers task to the environment interface.
             Triggers task start-up.

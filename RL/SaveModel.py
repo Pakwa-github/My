@@ -1,6 +1,6 @@
 import torch
 
-from MyPPO import PPO
+from RL.MyPPO import PPO
 
 def save(
     model:PPO,

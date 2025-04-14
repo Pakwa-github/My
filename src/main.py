@@ -1,17 +1,19 @@
 import torch
 import yaml
-from Env.Config.GarmentConfig import GarmentConfig
-from RL.MyPPO import PPO
+
+from RL.FoldPPO import PPO
 from RL.RLEnv import RlEnvBase
 from RL.SaveModel import save
-from RL.SimEnv import SimEnv
-from RL.TaskDefine import FoldTask
+# from RL.SimEnv import SimEnv
+# from RL.TaskDefine import FoldTask
 import carb
 from isaacsim import SimulationApp
 import numpy as np
 
 simulation_app = SimulationApp({"headless": False})
 
+from Env.Config.SceneConfig import SceneConfig
+from Env.Config.GarmentConfig import GarmentConfig
 from Env.Config.FrankaConfig import FrankaConfig
 from Env.env.BaseEnv import BaseEnv
 
@@ -24,6 +26,9 @@ def init():
     
     task = FoldTask()
     garment_config = GarmentConfig(usd_path=task_config["garment_config"]["garment_path"])
+    garment_config.pos = np.array(task_config["garment_config"]["garment_pos"])
+    garment_config.ori = np.array(task_config["garment_config"]["garment_ori"])
+    garment_config.scale = np.array(task_config["garment_config"]["garment_scale"])
     garment_config.particle_contact_offset = 0.01
     rl_env = RlEnvBase(headless=False)
     rl_env.set_task(task, [garment_config], backend="torch")
@@ -31,11 +36,17 @@ def init():
     franka_config = FrankaConfig(franka_num=2, 
                                  pos=[np.array([-2,0,0.]),np.array([-4,0,0.])], 
                                  ori=[np.array([0,0,0]),np.array([0,0,0])])
+    
     sim_env=SimEnv(garment_config=[garment_config], 
                    franka_config=franka_config, 
                    task_config=task_config)
     
+    
+
+
     sim_env.get_demo(task_config["demo_point"], wo_gripper=True, debug = False)
+
+    print("\n\n\nsssssssssssssssssssssss\n\n\n\n\n\n")
     
     model = PPO(
         "MlpPolicy",
@@ -54,6 +65,7 @@ def init():
         tensorboard_log="./tsb/fold",
         normalize_advantage=False,
     )
+
     return model
 
 
@@ -75,7 +87,7 @@ if __name__ == "__main__":
 
 
 
-
+    # scene_config=SceneConfig(room_usd_path="/home/pakwa/Downloads/room1.usd",)
 
     # garment_config=GarmentConfig(
     #     usd_path="/home/pakwa/GarmentLab/Assets/Garment/Tops/NoCollar_Lsleeve_FrontClose/TNLC_Dress057/TNLC_Dress057_obj.usd",
@@ -83,7 +95,8 @@ if __name__ == "__main__":
     
     # franka_config=FrankaConfig(ori=[np.array([0,0,-np.pi/2])])
 
-    # env = BaseEnv(garment_config=[garment_config],
+    # env = BaseEnv(scene_config=scene_config,
+    #             garment_config=[garment_config],
     #             franka_config=franka_config,)
 
     # env.reset()

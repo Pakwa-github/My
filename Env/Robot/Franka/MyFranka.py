@@ -227,88 +227,88 @@ class MyFranka:
 
             
 
-class MyFranka_GPT:
-    def __init__(self, world: World, pos=None, ori=None, prim_path: str = None, robot_name: str = None):
-        self.world = world
+# class MyFranka_GPT:
+#     def __init__(self, world: World, pos=None, ori=None, prim_path: str = None, robot_name: str = None):
+#         self.world = world
 
-        # 生成唯一的 prim 路径和机器人名称
-        if prim_path is None:
-            self._franka_prim_path = find_unique_string_name("/World/Franka", is_unique_fn=lambda x: not is_prim_path_valid(x))
-        else:
-            self._franka_prim_path = prim_path
+#         # 生成唯一的 prim 路径和机器人名称
+#         if prim_path is None:
+#             self._franka_prim_path = find_unique_string_name("/World/Franka", is_unique_fn=lambda x: not is_prim_path_valid(x))
+#         else:
+#             self._franka_prim_path = prim_path
 
-        if robot_name is None:
-            self._franka_robot_name = find_unique_string_name("my_franka", is_unique_fn=lambda x: not self.world.scene.object_exists(x))
-        else:
-            self._franka_robot_name = robot_name
+#         if robot_name is None:
+#             self._franka_robot_name = find_unique_string_name("my_franka", is_unique_fn=lambda x: not self.world.scene.object_exists(x))
+#         else:
+#             self._franka_robot_name = robot_name
 
-        self.init_position = pos
-        self.init_ori = ori
-        # 例如默认末端执行器朝向可以基于初始欧拉角进行设置
-        self.default_ee_ori = torch.from_numpy(np.array([0, np.pi, 0])) + ori if ori is not None else None
+#         self.init_position = pos
+#         self.init_ori = ori
+#         # 例如默认末端执行器朝向可以基于初始欧拉角进行设置
+#         self.default_ee_ori = torch.from_numpy(np.array([0, np.pi, 0])) + ori if ori is not None else None
 
-        # 添加 Franka 机器人到场景中（请确保资源路径在机器人类内部或外部正确配置）
-        from omni.isaac.franka import Franka  # 动态导入
-        self.world.scene.add(Franka(
-            prim_path=self._franka_prim_path,
-            name=self._franka_robot_name,
-            position=pos,
-            orientation=euler_angles_to_quat(ori) if ori is not None else None
-        ))
-        self._robot: Franka = self.world.scene.get_object(self._franka_robot_name)
-        self._articulation_controller = self._robot.get_articulation_controller()
-        # 此处控制器、运动规划、抓放控制器等根据实际需求初始化
-        from omni.isaac.franka.controllers.rmpflow_controller import RMPFlowController
-        from omni.isaac.franka.controllers.pick_place_controller import PickPlaceController
-        from omni.isaac.franka import KinematicsSolver
-        self._controller = RMPFlowController(name="rmpflow_controller", robot_articulation=self._robot)
-        self._kinematic_solver = KinematicsSolver(self._robot)
-        self._pick_place_controller = PickPlaceController(
-            name="pick_place_controller", robot_articulation=self._robot, gripper=self._robot.gripper
-        )
-        self._controller.reset()
-        self._pick_place_controller.reset()
+#         # 添加 Franka 机器人到场景中（请确保资源路径在机器人类内部或外部正确配置）
+#         from omni.isaac.franka import Franka  # 动态导入
+#         self.world.scene.add(Franka(
+#             prim_path=self._franka_prim_path,
+#             name=self._franka_robot_name,
+#             position=pos,
+#             orientation=euler_angles_to_quat(ori) if ori is not None else None
+#         ))
+#         self._robot: Franka = self.world.scene.get_object(self._franka_robot_name)
+#         self._articulation_controller = self._robot.get_articulation_controller()
+#         # 此处控制器、运动规划、抓放控制器等根据实际需求初始化
+#         from omni.isaac.franka.controllers.rmpflow_controller import RMPFlowController
+#         from omni.isaac.franka.controllers.pick_place_controller import PickPlaceController
+#         from omni.isaac.franka import KinematicsSolver
+#         self._controller = RMPFlowController(name="rmpflow_controller", robot_articulation=self._robot)
+#         self._kinematic_solver = KinematicsSolver(self._robot)
+#         self._pick_place_controller = PickPlaceController(
+#             name="pick_place_controller", robot_articulation=self._robot, gripper=self._robot.gripper
+#         )
+#         self._controller.reset()
+#         self._pick_place_controller.reset()
 
-    def get_prim_path(self):
-        return self._franka_prim_path
+#     def get_prim_path(self):
+#         return self._franka_prim_path
 
-    def get_cur_ee_pos(self):
-        ee_pos, R = self._controller.get_motion_policy().get_end_effector_as_prim().get_world_pose()
-        return ee_pos, R
+#     def get_cur_ee_pos(self):
+#         ee_pos, R = self._controller.get_motion_policy().get_end_effector_as_prim().get_world_pose()
+#         return ee_pos, R
 
-    def pick_and_place(self, pick, place):
-        self._pick_place_controller.reset()
-        self._robot.gripper.open()
-        while True:
-            self.world.step(render=True)
-            actions = self._pick_place_controller.forward(
-                picking_position=pick,
-                placing_position=place,
-                current_joint_positions=self._robot.get_joint_positions(),
-                end_effector_offset=np.array([0, 0.005, 0]),
-            )
-            if self._pick_place_controller.is_done():
-                break
-            self._articulation_controller.apply_action(actions)
+#     def pick_and_place(self, pick, place):
+#         self._pick_place_controller.reset()
+#         self._robot.gripper.open()
+#         while True:
+#             self.world.step(render=True)
+#             actions = self._pick_place_controller.forward(
+#                 picking_position=pick,
+#                 placing_position=place,
+#                 current_joint_positions=self._robot.get_joint_positions(),
+#                 end_effector_offset=np.array([0, 0.005, 0]),
+#             )
+#             if self._pick_place_controller.is_done():
+#                 break
+#             self._articulation_controller.apply_action(actions)
 
-    def open(self):
-        for _ in range(10):
-            self._robot.gripper.open()
-            self.world.step(render=True)
+#     def open(self):
+#         for _ in range(10):
+#             self._robot.gripper.open()
+#             self.world.step(render=True)
 
-    def close(self):
-        for _ in range(10):
-            self._robot.gripper.close()
-            self.world.step(render=True)
+#     def close(self):
+#         for _ in range(10):
+#             self._robot.gripper.close()
+#             self.world.step(render=True)
 
-    def move(self, end_loc, env_ori=None):
-        start_loc = self.get_cur_ee_pos()[0]
-        if env_ori is not None:
-            end_effector_orientation = euler_angles_to_quat(env_ori)
-        else:
-            end_effector_orientation = None
-        target_joint_positions = self._controller.forward(
-            target_end_effector_position=end_loc, target_end_effector_orientation=end_effector_orientation
-        )
-        self._articulation_controller.apply_action(target_joint_positions)
+#     def move(self, end_loc, env_ori=None):
+#         start_loc = self.get_cur_ee_pos()[0]
+#         if env_ori is not None:
+#             end_effector_orientation = euler_angles_to_quat(env_ori)
+#         else:
+#             end_effector_orientation = None
+#         target_joint_positions = self._controller.forward(
+#             target_end_effector_position=end_loc, target_end_effector_orientation=end_effector_orientation
+#         )
+#         self._articulation_controller.apply_action(target_joint_positions)
 

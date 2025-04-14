@@ -1,0 +1,20 @@
+demo_point:
+- 0.33
+- 0
+- 0.32
+garment_name: dress12345
+target_point:
+- 0.0
+- 1.85
+- 1.05
+- 0.60
+- 0.95
+- 1.05
+- 0.0
+- 1.85
+- 1.05
+- -0.60
+- 0.95
+- 1.05
+task_name: SofaGrasp
+block_num: 0

@@ -532,7 +532,7 @@ class ActorCriticPolicy(BasePolicy):
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
 
-        from VisionEncoder import encoder, sem_model
+        from RL.VisionEncoder import encoder, sem_model
         self.encoder = encoder(1024).to(self.device)
         self.sem_encoder = sem_model(1, init_pts=256).to(self.device)
         self.norm = nn.Tanh()
