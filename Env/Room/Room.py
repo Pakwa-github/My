@@ -24,10 +24,8 @@ class Wrap_room:
             prim_path, is_unique_fn=lambda x: not is_prim_path_valid(x)
         )
         self._room_usd_path = usd_path
-
         # add wash_machine to stage
         add_reference_to_stage(self._room_usd_path, self._room_prim_path)
-
         self._room_prim = XFormPrim(
             self._room_prim_path,
             name="Room",
@@ -64,6 +62,16 @@ class Wrap_basket:
             position=self._basket_position,
             orientation=euler_angles_to_quat(self._basket_orientation, degrees=True),
         )
+    
+    def get_aabb(self):
+        import omni.usd
+        from pxr import UsdGeom, Gf
+        stage = omni.usd.get_context().get_stage()
+        prim = self._basket_prim.prim
+        bbox_cache = UsdGeom.BBoxCache(0.0, ["default"])
+        bbox = bbox_cache.ComputeWorldBound(prim)
+        range = bbox.GetRange()
+        return np.array(range.GetMin()), np.array(range.GetMax())
 
 
 class Wrap_base:

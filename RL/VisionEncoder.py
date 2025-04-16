@@ -3,6 +3,9 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
+# 自定义视觉编码器和语义编码器
+# 标准 SB3 PPO 使用的是一个简单的（通常是 MLP 或 CNN）特征提取器
+
 class PointNetFeaturePropagation(nn.Module):
     def __init__(self, in_channel, mlp):
         super(PointNetFeaturePropagation, self).__init__()

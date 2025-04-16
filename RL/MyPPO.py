@@ -112,6 +112,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             tensorboard_log=tensorboard_log,
             supported_action_spaces=supported_action_spaces,
         )
+        # self.make_env_fn = make_env_fn
+        # self.sim_env = make_env_fn()
         self.sim_env = sim_env
         self.n_steps = n_steps
         self.gamma = gamma
@@ -124,6 +126,11 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         if _init_setup_model:
             self._setup_model()
+
+    # def reset_env(self):
+    #     """💡 每次都 new 一个新的 sim_env"""
+    #     print("🔄 Resetting simulation environment from scratch...")
+    #     self.sim_env = self.make_env_fn()
 
     def _setup_model(self) -> None:
         self._setup_lr_schedule()
@@ -158,6 +165,13 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         # rollout_buffer: RolloutBuffer,
         n_rollout_steps: int,
     ) -> bool:
+        """
+        这边没有 rollout buffer，也没有 callback。
+        仅仅是每一步拿 obs；扔进 policy 拿 action；步进环境；累加 reward（用于计算评估指标，比如 success rate）
+        sb3没有？
+        """
+        # self.reset_env()
+
         self.policy.set_training_mode(False)
 
         n_steps = 0
@@ -199,9 +213,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             n_steps += 1
 
             succ_list.append(rewards)
-
             succ_rate = sum(succ_list)/len(succ_list)
-
             print("evaluation success rate:", succ_rate)
 
     def collect_rollouts(
@@ -225,6 +237,9 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             collected, False if callback terminated rollout prematurely.
         """
     
+        """env(VecEnv)换成了 num_envs，只取这个里面的变量"""
+        # self.reset_env()
+        
         # Switch to eval mode (this affects batch norm / dropout)
         self.policy.set_training_mode(False)
 
@@ -237,7 +252,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         callback.on_rollout_start()
 
         while n_steps < n_rollout_steps:
-            last_obs = self.sim_env.get_obs()
+            last_obs = self.sim_env.get_obs() # ！me
             if self.use_sde and self.sde_sample_freq > 0 and n_steps % self.sde_sample_freq == 0:
                 # Sample a new noise matrix
                 self.policy.reset_noise(num_envs)
@@ -252,6 +267,11 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             # Rescale and perform action
             clipped_actions = actions
 
+            # GPT:这部分修改体现了你对任务特点（比如动作空间中，直接由仿真软件保证动作有效）的认识，
+            # 减去了部分 SB3 中为应对通用场景而设计的处理，可能更好地适应特定仿真环境的需求。
+            
+            # 是对连续动作空间（Box）的处理，用于确保 action 落在合法范围
+            # 注销了原有的
             # if isinstance(self.action_space, spaces.Box):
             #     if self.policy.squash_output:
             #         # Unscale the actions to match env bounds
@@ -271,13 +291,15 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             if not callback.on_step():
                 return False
 
-            # self._update_info_buffer(infos, dones)
+            # self._update_info_buffer(infos, dones) # 注销了原有的
             n_steps += 1
 
             if isinstance(self.action_space, spaces.Discrete):
                 # Reshape in case of discrete action
                 actions = actions.reshape(-1, 1)
 
+            # 用于超时终止时使用 value function 做 bootstrap，估算末端奖励。
+            # 注销了原有的
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
             # for idx, done in enumerate(dones):
@@ -295,16 +317,26 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 last_obs, 
                 actions,
                 rewards,
-                dones, 
+                dones,   # 原本：self._last_episode_starts,  # type: ignore[arg-type]
                 values,
                 log_probs,
             )
 
+        #     # 原有的东西
+        #     self._last_obs = new_obs  # type: ignore[assignment]
+        #     self._last_episode_starts = dones
 
-        rollout_buffer.compute_returns_and_advantage(last_values=th.tensor([0]), dones=dones)
+        # with th.no_grad():
+        #     # Compute value for the last timestep
+        #     values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))
 
+
+
+        # 计算 GAE、归一化 return、执行 callback（比如 tensorboard logging）
+        """ !!! last value"""
+        # rollout_buffer.compute_returns_and_advantage(last_values=th.tensor([0]), dones=dones)
+        rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
         callback.update_locals(locals())
-
         callback.on_rollout_end()
 
         return True
@@ -367,8 +399,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         callback.on_training_start(locals(), globals())
 
         assert self.env is not None
-        
-        print("start training")
 
         while self.num_timesteps < total_timesteps:
             continue_training = self.collect_rollouts(self.env.num_envs, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
@@ -387,8 +417,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             rollout_data = self.get_rollout_data()
 
             self.train(rollout_data)
-
-            print("training iteration:", iteration)
+            print("training iteration finish:", iteration)
 
         callback.on_training_end()
 
@@ -398,7 +427,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         state_dicts = ["policy", "policy.optimizer"]
 
         return state_dicts, []
-
 
 class PPO(OnPolicyAlgorithm):
     """
@@ -560,6 +588,11 @@ class PPO(OnPolicyAlgorithm):
     def _setup_model(self) -> None:
         super()._setup_model()
 
+
+        # 初始化学习率调度器
+        """ cursor 作用是？"""
+        # self.lr_schedule = get_schedule_fn(self.learning_rate)
+
         # Initialize schedules for policy/value clipping
         self.clip_range = get_schedule_fn(self.clip_range)
         if self.clip_range_vf is not None:
@@ -622,8 +655,14 @@ class PPO(OnPolicyAlgorithm):
             ratio = th.exp(log_prob)
 
             # clipped surrogate loss
-            policy_loss_1 = returns * ratio
-            policy_loss_2 = returns * th.clamp(ratio, 1 - clip_range, 1 + clip_range)
+            """ !me advantages 换成了 returns"""
+            """ !!! why GPT:一般来说，优势（通常是 TD-residual 或 GAE 计算结果）
+            能帮助消除基线效应和减少方差。这里直接使用 return 
+            可能是基于你对奖励设计或任务反馈的特殊考虑，但也可能会影响训练收敛与稳定性。"""
+            # policy_loss_1 = returns * ratio
+            # policy_loss_2 = returns * th.clamp(ratio, 1 - clip_range, 1 + clip_range)
+            policy_loss_1 = advantages * ratio
+            policy_loss_2 = advantages * th.clamp(ratio, 1 - clip_range, 1 + clip_range)
             policy_loss = -th.min(policy_loss_1, policy_loss_2).mean()
 
             # Logging
@@ -653,7 +692,12 @@ class PPO(OnPolicyAlgorithm):
 
             entropy_losses.append(entropy_loss.item())
 
-            loss = policy_loss # + self.ent_coef * entropy_loss + self.vf_coef * value_loss
+            """ !me 注释掉了部分loss"""
+            """ !!! 这一处修改意味着当前训练过程中，你只在优化策略网络，
+            而没有同时通过梯度下降更新价值函数参数，也未鼓励足够的探索（熵项未加）。
+            这样处理或许是针对你的任务在反馈设计上已经有较明确的“奖励—成功率”指标，
+            但可能会使得优势估计出现偏差，并且降低策略多样性。"""
+            loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
 
             # loss = th.mean(returns,dim = 0)
 

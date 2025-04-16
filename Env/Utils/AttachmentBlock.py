@@ -52,7 +52,6 @@ class AttachmentBlock:
         # self.move_block_controller.disable_gravities()
         # or you can choose to make block be affected by gravity
         # self.move_block_controller.enable_gravities()
-
         return self.move_block_controller
 
     def attach(self):
@@ -67,9 +66,9 @@ class AttachmentBlock:
             )
             attachment.GetActor0Rel().SetTargets([self.garment_path[i] + "/mesh"])
             attachment.GetActor1Rel().SetTargets([self.block_path])
-            att = PhysxSchema.PhysxAutoAttachmentAPI(attachment.GetPrim())
+            att = PhysxSchema.PhysxAutoAttachmentAPI(attachment.GetPrim())  # 自动寻找相近的 cloth 顶点并建立附着
             att.Apply(attachment.GetPrim())
-            _ = att.CreateDeformableVertexOverlapOffsetAttr(defaultValue=0.02)
+            _ = att.CreateDeformableVertexOverlapOffsetAttr(defaultValue=0.02)  # 附着判定的“粘性半径”
 
     def detach(self):
         # delete all the attachment related to the cube

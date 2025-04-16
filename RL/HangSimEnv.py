@@ -236,7 +236,7 @@ class AffordanceEnv(BaseEnv):
             self.world.stop()
         return reward
 
-
+    # 随机选个衣服点云上的点
     def allocate_point(self, index, save_path):
         if index==0:
             self.selected_pool=self.garment[0].get_vertices_positions()*self.garment[0].garment_config.scale

@@ -76,7 +76,6 @@ class Recording_Camera:
             data = self.camera.get_rgb()
             if len(data):
                 self.video_frame.append(data)
-
             # take rgb photo every 500 ms
             time.sleep(0.5)
             # print("get rgb successfully")
@@ -92,9 +91,7 @@ class Recording_Camera:
             for frame in self.video_frame:
                 # write each video frame into gif
                 writer.append_data(frame)
-
         print(f"GIF has been save into {output_filename}")
-
         self.video_frame.clear()
 
     def judge_contact_with_ground(
@@ -109,7 +106,6 @@ class Recording_Camera:
             if self.data is None:
                 continue
             self.point_cloud = self.data["data"]
-
             # print(self.point_cloud)
             if len(self.point_cloud) == 0:
                 continue
@@ -119,9 +115,7 @@ class Recording_Camera:
             if self.point_cloud.shape[1] < 3:
                 print(self.data)
                 continue
-
             z_values = self.point_cloud[:, 2]
-
             # 计算 z 坐标小于 0.01 的点的数量
             count_z = np.sum(z_values < 0.05).item()
             # print(count_z)
@@ -145,10 +139,8 @@ class Recording_Camera:
         if len(self.point_cloud) == 0:
             return
         if self.point_cloud.ndim < 2:
-
             return
         if self.point_cloud.shape[1] < 3:
-
             return
         z_values = self.point_cloud[:, 2]
         max_z_value = np.max(z_values).item()

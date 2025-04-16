@@ -157,7 +157,6 @@ class Recording_Camera:
             for frame in self.video_frame:
                 # write each video frame into gif
                 writer.append_data(frame)
-
         print(f"GIF has been save into {save_path}")
         # clear video frame list
         self.video_frame.clear()

@@ -532,6 +532,7 @@ class ActorCriticPolicy(BasePolicy):
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
 
+        # !me
         from RL.VisionEncoder import encoder, sem_model
         self.encoder = encoder(1024).to(self.device)
         self.sem_encoder = sem_model(1, init_pts=256).to(self.device)
@@ -581,7 +582,7 @@ class ActorCriticPolicy(BasePolicy):
         #       net_arch here is an empty list and mlp_extractor does not
         #       really contain any layers (acts like an identity module).
         self.mlp_extractor = MlpExtractor(
-            1024,
+            1024,   # ！me
             net_arch=self.net_arch,
             activation_fn=self.activation_fn,
             device=self.device,
@@ -647,7 +648,7 @@ class ActorCriticPolicy(BasePolicy):
         :return: action, value and log probability of the action
         """
         # Preprocess the observation if needed
-        features = self.encoder(obs)
+        features = self.encoder(obs)  # ！me
         if self.share_features_extractor:
             latent_pi, latent_vf = self.mlp_extractor(features)
         else:
@@ -697,6 +698,7 @@ class ActorCriticPolicy(BasePolicy):
         mean_actions = self.action_net(latent_pi)
 
         if isinstance(self.action_dist, DiagGaussianDistribution):
+            # !me
             log_std = th.tensor([-1]*mean_actions.shape[-1]).to(self.log_std.device).to(self.log_std.dtype)
             return self.action_dist.proba_distribution(mean_actions, log_std), mean_actions
         elif isinstance(self.action_dist, CategoricalDistribution):
@@ -734,7 +736,7 @@ class ActorCriticPolicy(BasePolicy):
             and entropy of the action distribution.
         """
         # Preprocess the observation if needed
-        features = self.encoder(obs)
+        features = self.encoder(obs)  # !me
         if self.share_features_extractor:
             latent_pi, latent_vf = self.mlp_extractor(features)
         else:

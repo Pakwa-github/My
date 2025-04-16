@@ -40,11 +40,9 @@ class WrapFranka:
         recording_camera=None,
         usd_path: str = None,
     ):
-        # define world
         self.world = world
         self.scene = self.world.get_physics_context()._physics_scene
         self.recording_camera = recording_camera
-        # set robot parameters
         if prim_path is None:
             self._franka_prim_path = find_unique_string_name(
                 initial_name="World/Franka",
@@ -61,10 +59,7 @@ class WrapFranka:
             self._franka_robot_name = robot_name
         self._initial_position = position
         self._initial_orientation = euler_angles_to_quat(orientation, degrees=True)
-
         self._usd_path = usd_path
-
-        # set robot
         self._robot = Franka(
             prim_path=self._franka_prim_path,
             name=self._franka_robot_name,
@@ -72,7 +67,6 @@ class WrapFranka:
             orientation=self._initial_orientation,
             usd_path=self._usd_path,
         )
-
         self.rmp_config = load_supported_motion_policy_config("Franka", "RMPflow")
         self.rmpflow = RmpFlow(**self.rmp_config)
         self.rmpflow.set_robot_base_pose(
@@ -82,8 +76,6 @@ class WrapFranka:
             self._robot, self.rmpflow, default_physics_dt=1 / 60.0
         )
         self._articulation_controller = self._robot.get_articulation_controller()
-
-        # add franka to the world
         self.world.scene.add(self._robot)
 
         # check whether point is reachable or not
@@ -91,35 +83,20 @@ class WrapFranka:
         self.error_nochange_epoch = 0
 
     def initialize(self):
-        """
-        initialize robot
-        """
         self._robot.initialize()
 
     def get_cur_ee_pos(self):
-        """
-        get current end_effector_position and end_effector orientation
-        """
         position, orientation = self.rmpflow.get_end_effector_as_prim().get_world_pose()
         return position, orientation
 
     def get_cur_grip_pos(self):
-        """
-        get current gripper position and orientation
-        """
         position, orientation = self._robot.gripper.get_world_pose()
         return position, orientation
 
     def open(self):
-        """
-        open the gripper of franka
-        """
         self._robot.gripper.open()
 
     def close(self):
-        """
-        close the gripper of franka
-        """
         self._robot.gripper.close()
 
     def Rotation(self, quaternion, vector):
@@ -162,25 +139,23 @@ class WrapFranka:
     
 
     def RMPflow_Move(self, position, orientation=None):
-        """
-        Use RMPflow_controller to move the Franka
-        """
         self.world.step(render=True)
-        # obtain target position
-        position = torch.tensor(position)  # me
+        position = self.to_tensor(position)   # me
         position = position.cpu().numpy().reshape(-1)
-        # obtain target orientation(from euler to quartenion)
         if orientation is not None:
             orientation = euler_angles_to_quat(orientation, degrees=True)
-        # set end effector target
-        self.rmpflow.set_end_effector_target(
-            target_position=position, target_orientation=orientation
-        )
-        # update obstacle position and get target action
-        self.rmpflow.update_world()
-        actions = self.articulation_rmpflow.get_next_articulation_action()
-        # apply actions
-        self._articulation_controller.apply_action(actions)
+        try:
+            self.rmpflow.set_end_effector_target(
+                target_position=position, target_orientation=orientation
+            )
+            # update obstacle position and get target action
+            self.rmpflow.update_world()
+            actions = self.articulation_rmpflow.get_next_articulation_action()
+            self._articulation_controller.apply_action(actions)
+            return True
+        except Exception as e:
+            cprint("❌ RMPflow_Move连续错误，返回失败", "red")
+            return False
 
     def move(self,end_loc,env_ori=None):
         self.RMPflow_Move(position=end_loc, orientation=env_ori)
@@ -206,7 +181,6 @@ class WrapFranka:
         error = F.mse_loss(
             current_position.clone().detach(), target_position.clone().detach()
         ).item()
-
         error_gap = error - self.pre_error
         self.pre_error = error
 
@@ -236,7 +210,7 @@ class WrapFranka:
     def check_gripper_arrive(
         self,
         target_position,
-        error_record_file: str = "Env_Eval/error_record.txt",
+        error_record_file: str = "Env_Eval/sofa_record.txt",
     ) -> bool:
         """
         check whether gripper has arrived at the attach block position
@@ -250,11 +224,10 @@ class WrapFranka:
             gripper_position
             + self.Rotation(gripper_orientation, torch.Tensor([0.0, 0.0, 0.05]))
         ).cpu()
-        current_position = torch.tensor(current_position)  # me
-        target_position = torch.tensor(target_position)  # me
+        current_position = self.to_tensor(current_position)  # me
+        target_position = self.to_tensor(target_position)  # me
         error = F.mse_loss(
             current_position.clone().detach(), target_position.clone().detach()
-            # current_position, target_position
         ).item()
         # print("current error:", error)
         error_gap = error - self.pre_error
@@ -269,7 +242,6 @@ class WrapFranka:
         elif np.isnan(error):
             self.world.stop()
             record_success_failure(False, error_record_file, str="franka fly")
-
         else:
             return True
         
@@ -282,69 +254,21 @@ class WrapFranka:
         """
         make attach_block follow the franka's gripper during the movement of franka.
         """
-        # control franka to move
-        self.RMPflow_Move(position=target_position, orientation=target_orientation)
-        # get the position and orientation of franka's gripper
-        gripper_position, gripper_orientation = self.get_cur_grip_pos()
-        # get block position
-        block_position = gripper_position + self.Rotation(
-            gripper_orientation, torch.Tensor([0.0, 0.0, 0.05])
-        )
-        # let block follow the gripper
-        attach_block.block.set_world_pose(block_position, gripper_orientation)
-        # Render World to see the block move
-        self.world.step(render=True)
-
-    def fetch_garment_from_washing_machine(
-        self,
-        target_positions,
-        attach_block,
-        error_record_file: str = "Env_Eval/washmachine_record.txt",
-    ):
-        """
-        whole procedure of bringing out the garment from wash_machine
-        """
-        # initialize franka
-        self.initialize()
-        # render world
-        self.world.step(render=True)
-        # reach attach block position
-        self.open()  # open franka's gripper
-        # enter washing machine
-
-        position = torch.tensor(target_positions[0])
-        print("start to enter washing machine")
-        while not self.wm_check_gripper_arrive(
-            position, error_record_file=error_record_file
-        ):
-            self.RMPflow_Move(position)
-
-        # catch the block
-        reach_position = attach_block.get_block_position().cpu()
-        reach_position = reach_position[0]
-        print(f"start to reach the fetch point : {reach_position}")
-        while not self.wm_check_gripper_arrive(
-            reach_position, error_record_file=error_record_file
-        ):
-            self.RMPflow_Move(reach_position)
-        # close franka's gripper
-        self.close()
-        for i in range(30):
+        try:
+            success = self.RMPflow_Move(position=target_position, orientation=target_orientation)
+            if not success:
+                return False
+            gripper_position, gripper_orientation = self.get_cur_grip_pos()
+            block_position = gripper_position + self.Rotation(
+                gripper_orientation, torch.Tensor([0.0, 0.0, 0.05])
+            )
+            # let block follow the gripper
+            attach_block.block.set_world_pose(block_position, gripper_orientation)
+            # Render World to see the block move
             self.world.step(render=True)
-        print("start to go to the target push_garment position")
-        # move franka according to the pre-set position
-
-        delete_wm_door()
-        # self.scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1))
-        # self.scene.CreateGravityMagnitudeAttr().Set(15)
-        for i in range(len(target_positions)):
-            # if i==0: i=1
-            # elif i==1: i=0
-            position = torch.Tensor(target_positions[i])
-            while not self.wm_check_gripper_arrive(
-                position, error_record_file=error_record_file
-            ):
-                self.move_block_follow_gripper(attach_block, position)
+            return True
+        except Exception as e:
+            return False
 
     def fetch_garment_from_sofa(
         self,
@@ -355,30 +279,32 @@ class WrapFranka:
         """
         whole procedure of bringing out the garment from sofa
         """
-        # render world
         self.world.step(render=True)
-        # reach attach block position
-        self.open()  # open franka's gripper
 
+        # reach attach block position
+        self.open()
         position = torch.Tensor(target_positions[0])
         cprint("start to enter the initial point above sofa", "magenta")
         while not self.check_gripper_arrive(position, error_record_file):
-            self.RMPflow_Move(position)
+            if not self.RMPflow_Move(position):
+                return False
 
         # catch the block
         reach_position = attach_block.get_block_position().cpu()
         reach_position = reach_position[0]
         cprint(f"start to reach the fetch point : {reach_position}", "magenta")
         while not self.check_gripper_arrive(reach_position, error_record_file):
-            if self.error_nochange_epoch >= 100:
+            if self.error_nochange_epoch >= 20:
                 record_success_failure(
                     False, error_record_file, str="pick_point is unreachable"
                 )
                 self.error_nochange_epoch = 0
                 return False
-            self.RMPflow_Move(reach_position)
+            if not self.RMPflow_Move(reach_position):
+                error_epoch += 1
+            else:
+                error_epoch = 0
 
-        # close franka's gripper
         self.close()
         for i in range(30):
             self.world.step(render=True)
@@ -386,159 +312,27 @@ class WrapFranka:
             f"start to go to the target push_garment position {target_positions[1]}",
             "magenta",
         )
-
         for i in range(len(target_positions)):
             position = torch.Tensor(target_positions[i])
             if i == 0:
                 while not self.check_gripper_arrive(position, error_record_file):
-                    self.move_block_follow_gripper(attach_block, position)
-            else:
-                while not self.check_gripper_arrive(position, error_record_file):
-                    self.move_block_follow_gripper(
-                        attach_block, position, target_orientation=[0, 90, 0]
-                    )
-
-        return True
-
-    def fetch_garment_from_basket(
-        self,
-        target_positions,
-        attach_block,
-        error_record_file: str = "Env_Eval/basket_record.txt",
-    ):
-        """
-        whole procedure of bringing out the garment from basket
-        """
-        # render world
-        self.world.step(render=True)
-        # reach attach block position
-        self.open()  # open franka's gripper
-
-        position = torch.Tensor(target_positions[1])
-        cprint("start to enter the initial point above basket", "magenta")
-        while not self.check_gripper_arrive(position, error_record_file):
-            self.RMPflow_Move(position, orientation=[0.0, 90.0, 90.0])
-
-        position = torch.Tensor(target_positions[0])
-        cprint("start to enter the initial point above basket", "magenta")
-        while not self.check_gripper_arrive(position, error_record_file):
-            self.RMPflow_Move(position)
-
-        # catch the block
-        reach_position = attach_block.get_block_position().cpu()
-        reach_position = reach_position[0]
-        cprint(f"start to reach the fetch point : {reach_position}", "magenta")
-        while not self.check_gripper_arrive(reach_position, error_record_file):
-            if self.error_nochange_epoch >= 200:
-                record_success_failure(
-                    False, error_record_file, str="pick_point is unreachable"
-                )
-                self.error_nochange_epoch = 0
-                return False
-            self.RMPflow_Move(reach_position)
-
-        # close franka's gripper
-        self.close()
-        for i in range(30):
-            self.world.step(render=True)
-        cprint("start to go to the target push_garment position", "magenta")
-
-        for i in range(len(target_positions)):
-            position = torch.Tensor(target_positions[i])
-            if i == 0:
-                while not self.check_gripper_arrive(position, error_record_file):
-                    self.move_block_follow_gripper(attach_block, position)
-            elif i == 1:
-                continue
-                while not self.check_gripper_arrive(position, error_record_file):
-                    self.move_block_follow_gripper(
-                        attach_block, position, target_orientation=[0, 90, 90]
-                    )
-            else:
-                while not self.check_gripper_arrive(position, error_record_file):
-                    if self.error_nochange_epoch >= 200:
-                        record_success_failure(
-                            False,
-                            "Env_Eval/basket_record.txt",
-                            str="pick_point is unreachable",
-                        )
-                        self.error_nochange_epoch = 0
+                    if not self.move_block_follow_gripper(attach_block, position):
                         return False
-                    self.move_block_follow_gripper(
+            else:
+                while not self.check_gripper_arrive(position, error_record_file):
+                    if not self.move_block_follow_gripper(
                         attach_block, position, target_orientation=[0, 90, 0]
-                    )
-
+                    ):
+                        return False
         return True
-
-    def pick(
-        self,
-        target_positions,
-        attach_block,
-        error_record_file: str = "Env_Eval/washmachine_record.txt",
-    ):
-        """
-        whole procedure of bringing out the garment from wash_machine
-        """
-        # initialize franka
-        self.initialize()
-        # render world
-        self.world.step(render=True)
-        # reach attach block position
-        self.open()  # open franka's gripper
-        # enter washing machine
-
-        position = torch.tensor(target_positions[0])
-        print("start to enter washing machine")
-        while not self.wm_check_gripper_arrive(
-            position, stir=True, error_record_file=error_record_file
-        ):
-            self.RMPflow_Move(position)
-
-        # catch the block
-        reach_position = attach_block.get_block_position().cpu()
-        reach_position = reach_position[0]
-        print(f"start to reach the fetch point : {reach_position}")
-        while not self.wm_check_gripper_arrive(
-            reach_position, stir=True, error_record_file=error_record_file
-        ):
-            self.RMPflow_Move(reach_position)
-        # close franka's gripper
-        self.close()
-        for i in range(30):
-            self.world.step(render=True)
-        print("start to go to the target push_garment position")
-        # move franka according to the pre-set position
-
-    def place(
-        self,
-        place_pos,
-        attach_block,
-        error_record_file: str = "Env_Eval/washmachine_record.txt",
-    ):
-
-        position = torch.tensor([0.0, 0.0, 0.75])
-        while not self.wm_check_gripper_arrive(
-            position, stir=True, error_record_file=error_record_file
-        ):
-            self.move_block_follow_gripper(attach_block, position)
-
-        position = torch.Tensor(place_pos)
-        while not self.wm_check_gripper_arrive(
-            position, stir=True, error_record_file=error_record_file
-        ):
-            self.move_block_follow_gripper(attach_block, position)
 
     def adjust_after_stir(self, target_pos=[-1.2, -0.55, 0.9]):
         print("start to adjust after stir")
         position = torch.tensor(target_pos)
-
         while not self.wm_check_gripper_arrive(position, stir=True):
             self.RMPflow_Move(position)
 
     def return_to_initial_position(self, initial_position, initial_orientation=None):
-        """
-        return to initial position
-        """
         initial_position = torch.Tensor(initial_position)
         while not self.check_gripper_arrive(initial_position):
             self.RMPflow_Move(initial_position, initial_orientation)
@@ -546,15 +340,11 @@ class WrapFranka:
         print("return to initial position")
 
     def sofa_pick_place_procedure(self, target_positions, attach_block):  # !!
-        """
-        whole procedure of pick and place
-        """
         self.world.step(render=True)
 
         self.open()
         position = torch.Tensor(target_positions[0])
         cprint("start to enter the initial point above sofa", "magenta")
-        
         while not self.check_gripper_arrive(position):
             self.RMPflow_Move(position)
 
@@ -586,77 +376,14 @@ class WrapFranka:
                         # record_success_failure(False,"data/Record.txt",str="pick_point is unreachable")
                         self.error_nochange_epoch = 0
                         return False
-                    self.move_block_follow_gripper(attach_block, position)
+                    self.move_block_follow_gripper(attach_block, position) # target_orientation=[0, 90, 0]
 
         return True
 
-    def basket_pick_place_procedure(self, target_positions, attach_block):
-        """
-        whole procedure of bringing out the garment from basket
-        """
-        # render world
-        self.world.step(render=True)
-        # reach attach block position
-        self.open()  # open franka's gripper
-
-        position = torch.Tensor(target_positions[1])
-        cprint("start to enter the initial point above basket", "magenta")
-        while not self.check_gripper_arrive(position):
-            self.RMPflow_Move(position, orientation=[0.0, 90.0, 90.0])
-
-        position = torch.Tensor(target_positions[0])
-        cprint("start to enter the initial point above basket", "magenta")
-        while not self.check_gripper_arrive(position):
-            self.RMPflow_Move(position)
-
-        # catch the block
-        reach_position = attach_block.get_block_position().cpu()
-        reach_position = reach_position[0]
-        cprint(f"start to reach the fetch point : {reach_position}", "magenta")
-        while not self.check_gripper_arrive(reach_position):
-            if self.error_nochange_epoch >= 200:
-                record_success_failure(
-                    False, "Env_Eval/basket_record.txt", str="pick_point is unreachable"
-                )
-                self.error_nochange_epoch = 0
-                return False
-            self.RMPflow_Move(reach_position)
-
-        # close franka's gripper
-        self.close()
-        for i in range(30):
-            self.world.step(render=True)
-        cprint("start to go to the target push_garment position", "magenta")
-
-        for i in range(len(target_positions)):
-            position = torch.Tensor(target_positions[i])
-            if i == 0:
-                while not self.check_gripper_arrive(position):
-                    self.move_block_follow_gripper(attach_block, position)
-            elif i == 1:
-                continue
-                while not self.check_gripper_arrive(position):
-                    self.move_block_follow_gripper(
-                        attach_block, position, target_orientation=[0, 90, 90]
-                    )
-            else:
-                while not self.check_gripper_arrive(position):
-                    if self.error_nochange_epoch >= 200:
-                        record_success_failure(
-                            False,
-                            "Env_Eval/basket_record.txt",
-                            str="pick_point is unreachable",
-                        )
-                        self.error_nochange_epoch = 0
-                        return False
-                    self.move_block_follow_gripper(attach_block, position)
-
-        return True
-    
     def get_prim_path(self):
         return self._franka_prim_path
 
-    def to_tensor(x):
+    def to_tensor(self, x):
         if isinstance(x, torch.Tensor):
             return x.clone().detach()
         else:

@@ -12,8 +12,6 @@ def euler_angles_to_quat(ori:Tuple[np.ndarray,torch.Tensor]):
     else:
         return ori
 
-
-
 def get_pose_world(trans_rel, rot_rel, robot_pos, robot_rot):
     if rot_rel is not None:
         rot = robot_rot @ rot_rel
@@ -26,7 +24,6 @@ def get_pose_world(trans_rel, rot_rel, robot_pos, robot_rot):
         trans = None
 
     return trans, rot
-
 
 def get_pose_relat(trans, rot, robot_pos, robot_rot):
     inv_rob_rot = robot_rot.T

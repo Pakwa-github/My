@@ -30,6 +30,11 @@ def rgb_periodic_saver(camera, interval_sec=60):
         count += 1
         time.sleep(interval_sec)
 
+def make_sim_env():
+    from RL.SofaSimEnv import SofaSimEnv
+    env = SofaSimEnv()
+    return env
+
 def init():
     # 初始化环境
     env = SofaSimEnv()
@@ -42,26 +47,24 @@ def init():
     display_thread = threading.Thread(target=rgb_periodic_saver, args=(env.point_cloud_camera,))
     display_thread.daemon = True
     display_thread.start()
-
-    env._do_stir()
     
     # 初始化PPO模型
     model = PPO(
         policy="MlpPolicy",
         sim_env=env,
         env=rl_env,
-        n_steps=16,
-        batch_size=16,
-        n_epochs=1,
         learning_rate=1e-4,
+        n_steps=16*5,     # 一次rollout 走16步 感觉不够啊
+        batch_size=16*4,  # 每次更新中使用的样本数量
+        n_epochs=3,     # 一个batch批次内进行优化轮次的数量 1
         gamma=0.99,
-        device="cuda:0",
-        ent_coef=0.01,
-        vf_coef=0.5,
+        normalize_advantage=True,   # 是否对优势进行归一化
+        ent_coef=0.005, # 熵系数 0.01 ～ 0.001 原本是0.01
+        vf_coef=0.5,  # 价值函数损失的权重
         max_grad_norm=0.5,
-        verbose=1,
         tensorboard_log="./tsb/SofaGrasp",
-        normalize_advantage=True,
+        verbose=1,
+        device="cuda:0", 
     )
     
     return model, env
@@ -75,7 +78,7 @@ if __name__ == "__main__":
     if mode == "train":
         # 训练模型
         cprint("\nTraining model...\n\nTraining model...\n\nTraining model...\n", "red")
-        model.learn(total_timesteps=160)
+        model.learn(total_timesteps=160*5)
         # 保存模型
         save(model, "./model/SofaGrasp.ckpt")
     else:

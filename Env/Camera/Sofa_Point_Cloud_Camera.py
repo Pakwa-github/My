@@ -70,10 +70,12 @@ class Point_Cloud_Camera:
         In this way, camera will generate cloud_point of semantic objects.
         """
         # print(self.camera.get_focal_length())
-
+        
+        # 设置焦距
         self.camera.set_focal_length(4.25)
 
         # define semantic objects
+        # 添加语义标签
         for i in range(garment_num):
             semantic_type = "class"
             semantic_label = (
@@ -86,6 +88,7 @@ class Point_Cloud_Camera:
         self.camera.initialize()
 
         # get pointcloud annotator and attach it to camera
+        # 绑定到渲染器
         self.render_product = rep.create.render_product(
             self.camera_prim_path, [640, 480]
         )
@@ -223,6 +226,7 @@ class Point_Cloud_Camera:
         pick_points = self.point_cloud[self.pick_num]
         return pick_points
 
+    # 返回模型评分最高的点作为抓取点
     def get_model_point(self):
         print(self.point_cloud.shape)
         input = self.point_cloud.reshape(1, -1, 3)
@@ -240,7 +244,8 @@ class Point_Cloud_Camera:
         self.pick_num = self.pick_num.cpu().numpy()
         print(self.pick_num, type(self.pick_num))
         return self.point_cloud[indices]
-
+    
+    # 返回当前点云中评分超过 0.95 的点的比例；
     def get_pc_ratio(self):
         """
         get ratio of point cloud that is greater than 0.95
@@ -251,7 +256,9 @@ class Point_Cloud_Camera:
         count_greater_than_0_95 = (output > 0.95).sum().item()
         ratio_greater_than_0_95 = count_greater_than_0_95 / output.numel()
         return ratio_greater_than_0_95
-
+    
+    # 使用 Place_Model 进行点云放置点预测
+    # 输入为 pick 点 + point cloud
     def get_place_point(self, pc, pick_point):
         """
         get place point from place model
@@ -269,6 +276,8 @@ class Point_Cloud_Camera:
         print("get place point from model")
         return pc[indices]
 
+
+    # 使用 Pick_Model 预测最适合抓取的点
     def get_pick_point(self, pc):
         """
         get pick point from pick model
@@ -281,6 +290,9 @@ class Point_Cloud_Camera:
         print("get pick point from model")
         return pc[indices]
 
+    # 返回 pick_num 所在点的语义分割标签（衣物编号）
+    # 利用 semantic annotator 获取 ID-to-class 映射
+    # 用于判断当前抓取目标属于哪件衣物
     def get_cloth_picking(self):
         # self.semantic_data=self.data["info"]['pointSemantic']
         self.semantic_id = self.semantic_data[self.pick_num]
@@ -290,6 +302,9 @@ class Point_Cloud_Camera:
         # print(self.seg.get(str(int(self.semantic_id[0]))))
         return self.seg.get(str(int(self.semantic_id[0])))["class"]
 
+    # 从 annotator_bbox 获取每个对象的遮挡率
+    # semanticId: 各个物体 ID
+    # 输出场景中衣物的遮挡率
     def get_occlusion(self):
         data = self.annotator_bbox.get_data()
         semanticid = data["data"]["semanticId"]

@@ -487,7 +487,9 @@ class BaseEnv:
         if affordance is not so good, then
             Use Pick_model and Place_model to adapt the garment.
         """
-        self.stir = False
+        self.stir = False 
+        # 是否处于“自适应阶段”的标志
+        # “是否搅拌过“
 
         while True:
             aff_pc, aff_color = self.point_cloud_camera.get_point_cloud_data(
@@ -507,7 +509,7 @@ class BaseEnv:
                     if last_char == b"\n":
                         with open("Env_Eval/sofa_record.txt", "a") as f:
                             f.write("result ")
-
+            # 返回当前点云中评分超过 0.95 的点的比例；
             aff_ratio = self.point_cloud_camera.get_pc_ratio()
             cprint(f"aff_ratio: {aff_ratio}", "cyan")
 

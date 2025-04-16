@@ -564,3 +564,25 @@
     #     min_vec = extent.GetMin()
     #     max_vec = extent.GetMax()
     #     return float(max_vec[2])
+
+# def select_target_garment(self, grasp_point):
+    #     """
+    #     根据抓取点在世界坐标系下的坐标，选择离抓取点最近的衣物对象。
+    #     这里我们假设每个 garment 都有一个 get_world_positions() 方法，
+    #     或者你可以直接计算其所有粒子在世界坐标系下的中心点（质心）。
+    #     """
+    #     min_dist = 0.01
+    #     target_garment = None
+    #     target_idx = -1
+    #     for idx, garment in enumerate(self.garments[:self.num_garments]):
+    #         # 如果 garment 提供 get_world_positions()，使用它计算衣物的质心：
+    #         world_points = garment.get_world_position()
+    #         if world_points.size == 0:
+    #             continue
+    #         distances = np.linalg.norm(world_points - grasp_point, axis=1)
+    #         local_min = np.min(distances)
+    #         if local_min < min_dist:
+    #             min_dist = local_min
+    #             target_garment = garment
+    #             target_idx = idx
+    #     return target_idx, target_garment

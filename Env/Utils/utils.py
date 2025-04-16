@@ -10,7 +10,7 @@ from omni.isaac.core.utils.prims import delete_prim, set_prim_visibility
 from termcolor import cprint
 from plyfile import PlyData, PlyElement
 
-
+# 构建一条传送带，包括底座 + 两侧轨道，用来模拟衣物传输路径
 def load_conveyor_belt(world, i=0, j=0):
     """
     Use Cube to generate Conveyor belt
@@ -197,7 +197,7 @@ def load_washmachine_model(world, i=0, j=0):
 
     return cube_list
 
-
+# 根据已有文件自动编号，避免覆盖，用于保存图片或点云文件（PLY）
 def get_unique_filename(base_filename, extension=".png", counter_return=False):
     counter = 0
     filename = f"{base_filename}_{counter}{extension}"
@@ -212,9 +212,8 @@ def get_unique_filename(base_filename, extension=".png", counter_return=False):
     else:
         return filename
 
-
+# 记录成功或失败的动作到 .txt 文件，带时间戳或失败原因，便于后期数据分析
 def record_success_failure(flag: bool, file_path, str=""):
-
     with open(file_path, "rb") as file:
         file.seek(0, 2)
         file_empty = file.tell() == 0
@@ -234,7 +233,7 @@ def record_success_failure(flag: bool, file_path, str=""):
         print("No writing")
         return
 
-
+# 从 .ply 文件中读取裸点云
 def read_ply(filename):
     """read XYZ point cloud from filename PLY file"""
     plydata = PlyData.read(filename)
@@ -242,7 +241,7 @@ def read_ply(filename):
     pc_array = np.array([[x, y, z] for x, y, z in pc])
     return pc_array
 
-
+# 从 .ply 文件中读取带颜色的点云
 def read_ply_with_colors(filename):
     plydata = PlyData.read(filename)
     pc = plydata["vertex"].data
@@ -263,9 +262,7 @@ def write_ply(points, filename):
         [tuple(point) for point in points],
         dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")],
     )
-
     el = PlyElement.describe(vertices, "vertex")
-
     # save PLY file
     PlyData([el], text=True).write(filename)
 
@@ -290,27 +287,24 @@ def write_ply_with_colors(points, colors, filename):
             ("blue", "u1"),
         ],
     )
-
     # create PlyElement
     el = PlyElement.describe(vertices, "vertex")
-
     # save PLY file
     PlyData([el], text=True).write(filename)
 
-
+# 判断某个抓取动作是否影响了其他衣物的位置
 def compare_position_before_and_after(pre_poses, cur_poses, index):
     nums = 0
     for i in range(len(pre_poses)):
         if i == index:
             continue
         dis = torch.norm(cur_poses[i] - pre_poses[i]).item()
-
         if dis > 0.2:
             nums += 1
     print(f"{nums} garments changed a lot")
     return nums
 
-
+# 检查是否一次抓取多个衣物
 def judge_once_per_time(cur_poses, index):
     nums = 1
     for i in range(len(cur_poses)):
@@ -375,10 +369,15 @@ def wm_judge_final_poses(
 
     return garment_index
 
-
+# 判断衣物是否还在沙发区域（通过 YZ 坐标判断），并删除已经“放置成功”的衣物
 def sofa_judge_final_poses(
     position, index, garment_index, save_path: str = "Env_Eval/sofa_record.txt"
 ):
+    """
+    position: 所有衣物位置
+    index：正在抓取的衣物
+    garment_index：True list真值判断列表，是否还在沙发上
+    """
     for i in range(len(garment_index)):
         if i == index:
             print(f"garment_{i} position: {position[i]}")
@@ -386,10 +385,9 @@ def sofa_judge_final_poses(
             y = position[index][1]
             if z > 0.3 or y > 1.20:
                 record_success_failure(False, save_path, "final pose not correct")
-
             delete_prim(f"/World/Garment/garment_{index}")
             garment_index[i] = False
-        elif garment_index[i]:
+        elif garment_index[i]: # 如果还在沙发上的剩余衣服
             print(f"garment_{i} position: {position[i]}")
             if (position[i][2] < 0.35 and position[i][2] > 0.15) or (
                 position[i][1] > 1.20 and position[i][1] < 1.55
@@ -408,9 +406,7 @@ def sofa_judge_final_poses(
             ):
                 delete_prim(f"/World/Garment/garment_{i}")
                 garment_index[i] = False
-
     record_success_failure(True, save_path, " success")
-
     return garment_index
 
 
@@ -463,13 +459,15 @@ def basket_judge_final_poses(
 
     return garment_index
 
-
+# 运输辅助块
 def load_sofa_transport_helper(world: World):
     cube_list = []
-
+    from omni.isaac.core.utils.prims import is_prim_path_valid
+    from omni.isaac.core.utils.string import find_unique_string_name
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_1",
+            name=find_unique_string_name(initial_name="transport_helper_1",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[-0.6, 2.18897, 0.70],
             prim_path="/World/transport_helper/transport_helper_1",
             scale=np.array([2.15535, 3.38791, 0.01165]),
@@ -479,10 +477,10 @@ def load_sofa_transport_helper(world: World):
             visible=False,
         )
     )
-
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_2",
+            name=find_unique_string_name(initial_name="transport_helper_2",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[0.6, 2.18897, 0.70],
             prim_path="/World/transport_helper/transport_helper_2",
             scale=np.array([2.15535, 3.38791, 0.01165]),
@@ -492,10 +490,10 @@ def load_sofa_transport_helper(world: World):
             visible=False,
         )
     )
-
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_3",
+            name=find_unique_string_name(initial_name="transport_helper_3",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[0.0, 1.3475, 0.82],
             prim_path="/World/transport_helper/transport_helper_3",
             scale=np.array([3.1503, 1.29183, 0.01118]),
@@ -505,10 +503,10 @@ def load_sofa_transport_helper(world: World):
             visible=False,
         )
     )
-
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_4",
+            name=find_unique_string_name(initial_name="transport_helper_4",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[0.0, 2.52661, 0.95755],
             prim_path="/World/transport_helper/transport_helper_4",
             scale=np.array([3.1503, 2.0, 0.01118]),
@@ -518,10 +516,10 @@ def load_sofa_transport_helper(world: World):
             visible=False,
         )
     )
-
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_5",
+            name=find_unique_string_name(initial_name="transport_helper_5",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[0.0, 1.62, -0.06],
             prim_path="/World/transport_helper/transport_helper_5",
             scale=np.array([2.70, 0.01, 1.0]),
@@ -531,19 +529,20 @@ def load_sofa_transport_helper(world: World):
             visible=False,
         )
     )
-
     for cube in cube_list:
         world.scene.add(cube)
-
     return cube_list
 
 
 def load_basket_transport_helper(world: World):
     cube_list = []
+    from omni.isaac.core.utils.prims import is_prim_path_valid
+    from omni.isaac.core.utils.string import find_unique_string_name
 
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_1",
+            name=find_unique_string_name(initial_name="transport_helper_1",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[3.76192, -0.47743, 1.5777],
             prim_path="/World/transport_helper/transport_helper_1",
             scale=np.array([2.15535, 3.38791, 0.01165]),
@@ -556,7 +555,8 @@ def load_basket_transport_helper(world: World):
 
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_2",
+            name=find_unique_string_name(initial_name="transport_helper_2",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[5.90925, -0.47743, 1.57852],
             prim_path="/World/transport_helper/transport_helper_2",
             scale=np.array([2.15535, 3.38791, 0.01165]),
@@ -569,7 +569,8 @@ def load_basket_transport_helper(world: World):
 
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_3",
+            name=find_unique_string_name(initial_name="transport_helper_3",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[4.89684, -1.46591, 1.26201],
             prim_path="/World/transport_helper/transport_helper_3",
             scale=np.array([3.1503, 1.29183, 0.01118]),
@@ -582,7 +583,8 @@ def load_basket_transport_helper(world: World):
 
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_4",
+            name=find_unique_string_name(initial_name="transport_helper_4",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[4.89684, 0.04995, 1.52616],
             prim_path="/World/transport_helper/transport_helper_4",
             scale=np.array([3.1503, 2.0, 0.01118]),
@@ -595,7 +597,8 @@ def load_basket_transport_helper(world: World):
 
     cube_list.append(
         FixedCuboid(
-            name="transport_helper_5",
+            name=find_unique_string_name(initial_name="transport_helper_5",
+                is_unique_fn=lambda x: not world.scene.object_exists(x),),
             position=[0.0, 1.62, -0.06],
             prim_path="/World/transport_helper/transport_helper_5",
             scale=np.array([2.70, 0.01, 1.0]),
@@ -630,11 +633,10 @@ def add_wm_door(world):
 def change_door_pos(obj):
     obj.set_world_pose(position=[-0.39497, 0.0, 0.5])
 
-
 def delete_wm_door():
     delete_prim("/World/wm_door")
 
-
+# 执行Furthest Point Sampling（FPS）
 def furthest_point_sampling(points, colors=None, semantics=None, n_samples=4096):
     """
     points: [N, 3] tensor containing the whole point cloud
@@ -648,20 +650,15 @@ def furthest_point_sampling(points, colors=None, semantics=None, n_samples=4096)
     if semantics is not None:
         semantics = semantics.astype(np.int32)
         semantics = torch.Tensor(semantics).cuda()
-
     # Number of points
     num_points = points.size(0)  # N
-
     # Initialize an array for the sampled indices
     sample_inds = torch.zeros(n_samples, dtype=torch.long).cuda()  # [S]
-
     # Initialize distances to inf
     dists = torch.ones(num_points).cuda() * float("inf")  # [N]
-
     # Select the first point randomly
     selected = torch.randint(num_points, (1,), dtype=torch.long).cuda()  # [1]
     sample_inds[0] = selected
-
     # Iteratively select points for a maximum of n_samples
     for i in range(1, n_samples):
         # Find the distance to the last added point in selected
@@ -669,14 +666,11 @@ def furthest_point_sampling(points, colors=None, semantics=None, n_samples=4096)
         dist_to_last_added_point = torch.sum(
             (points[last_added] - points) ** 2, dim=-1
         )  # [N]
-
         # If closer, update distances
         dists = torch.min(dist_to_last_added_point, dists)  # [N]
-
         # Pick the one that has the largest distance to its nearest neighbor in the sampled set
         selected = torch.argmax(dists)  # Scalar
         sample_inds[i] = selected
-
     if colors is not None and semantics is not None:
         return (
             points[sample_inds].cpu().numpy(),

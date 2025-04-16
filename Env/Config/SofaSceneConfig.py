@@ -1,122 +1,60 @@
 import os
 
-# Franka、Sofa、Room、Base_Layer、Basket、Point_Cloud Camera Position、Record Camera Position
+
 class SofaSceneConfig:
     def __init__(self):
         self.path = os.getcwd()
 
-        # ------------Franka Robot Config------------ #
-        self.robot_position = [0.0, 1.45, 0.22]  # sequence:"XYZ"
-
+        self.robot_position = [0.0, 1.45, 0.22]
         self.robot_orientation = [
             0.0,
             0.0,
             90.0,
-        ]  # sequence:"XYZ", input degrees, e.g.[0.0, 0.0, 90.0]
-
-        self.target_positions = [  # franka move positions sequence
+        ]
+        self.target_positions = [
             [0.0, 1.85, 1.05],
             [0.60, 0.95, 1.05],
         ]
-
         self.initial_position = [0.0011, 1.5458, 0.83217]
-        # ------------Sofa Config------------ #
-        self.sofa_position = [0.0, 2.14967, 0.06]  # sequence:"XYZ"
 
-        self.sofa_orientation = [
-            0.0,
-            0.0,
-            90.0,
-        ]  # sequence:"XYZ", input degrees, e.g.[0.0, 0.0, 90.0]
-
-        self.sofa_scale = [1.1, 1.0, 1.0]  # sequence:"XYZ", e.g.[1.0, 1.0, 1.0]
-
+        self.sofa_position = [0.0, 2.14967, 0.06] 
+        self.sofa_orientation = [0.0, 0.0, 90.0,]
+        self.sofa_scale = [1.1, 1.0, 1.0]
         self.sofa_prim_path = "/World/Sofa"
-
-        # Washing_Machine_Usd_Path(no need to change)
         self.sofa_usd_path = self.path + "/Assets/Sofa/sofa.usd"
 
-        # ------------Room Config------------ #
-        self.room_position = [0.0, 0.0, 0.0]  # sequence:"XYZ"
-
-        self.room_orientation = [
-            0.0,
-            0.0,
-            90.0,
-        ]  # sequence:"XYZ", input degrees, e.g.[0.0, 0.0, 90.0]
-
-        self.room_scale = [1.0, 1.0, 1.0]  # sequence:"XYZ", e.g.[1.0, 1.0, 1.0]
-
+        self.room_position = [0.0, 0.0, 0.0]
+        self.room_orientation = [0.0, 0.0, 90.0,]
+        self.room_scale = [1.0, 1.0, 1.0]
         self.room_prim_path = "/World/Room"
+        # self.room_usd_path = self.path + "/Assets/Scene/sofa_scene/scene.usd"
+        self.room_usd_path = "/home/pakwa/GPs/GarmentLab/Assets/Scene/FlatGrid.usd"
 
-        # Room_Usd_Path(no need to change)
-        self.room_usd_path = self.path + "/Assets/Scene/sofa_scene/scene.usd"
-
-        # ------------base_layer Config------------ #
-        self.base_layer_position = [0.0, 1.165, 0.0]  # sequence:"XYZ"
-
-        self.base_layer_orientation = [
-            0.0,
-            0.0,
-            90.0,
-        ]  # sequence:"XYZ", input degrees, e.g.[0.0, 0.0, 90.0]
-
-        self.base_layer_scale = [0.8, 0.8, 0.8]  # sequence:"XYZ", e.g.[1.0, 1.0, 1.0]
-
+        self.base_layer_position = [0.0, 1.165, 0.0]
+        self.base_layer_orientation = [0.0, 0.0, 90.0,]
+        self.base_layer_scale = [0.8, 0.8, 0.8]
         self.base_layer_prim_path = "/World/Base_Layer"
-
-        # base_layer_Usd_Path(no need to change)
         self.base_layer_usd_path = self.path + "/Assets/Robot_Base/base_layer.usd"
 
-        # ------------basket Config------------ #
-        self.basket_position = [0.56584, 0.95, 0.14092]  # sequence:"XYZ"
-
-        self.basket_orientation = [
-            0.0,
-            0.0,
-            0.0,
-        ]  # sequence:"XYZ", input degrees, e.g.[0.0, 0.0, 90.0]
-
-        self.basket_scale = [0.4, 0.4, 0.4]  # sequence:"XYZ", e.g.[1.0, 1.0, 1.0]
-
+        self.basket_position = [0.56584, 0.95, 0.14092]
+        self.basket_orientation = [0.0, 0.0, 0.0,]
+        self.basket_scale = [0.4, 0.4, 0.4]
         self.basket_prim_path = "/World/Basket"
-
-        # basket_Usd_Path(no need to change)
         self.basket_usd_path = self.path + "/Assets/Basket/basket.usd"
 
-        # ------------basket_2 Config------------ #
-        self.basket_2_position = [-0.56584, 0.95, 0.14092]  # sequence:"XYZ"
-
-        self.basket_2_orientation = [
-            0.0,
-            0.0,
-            0.0,
-        ]  # sequence:"XYZ", input degrees, e.g.[0.0, 0.0, 90.0]
-
-        self.basket_2_scale = [0.4, 0.4, 0.4]  # sequence:"XYZ", e.g.[1.0, 1.0, 1.0]
-
+        self.basket_2_position = [-0.56584, 0.95, 0.14092]
+        self.basket_2_orientation = [0.0, 0.0, 0.0,]
+        self.basket_2_scale = [0.4, 0.4, 0.4]
         self.basket_2_prim_path = "/World/Basket_2"
-
-        # basket_Usd_Path(no need to change)
         self.basket_2_usd_path = self.path + "/Assets/Basket/basket.usd"
 
-        # ------------Point_Cloud Camera Config------------ #
         self.point_cloud_camera_position = [0.0, 2.05, 3.2]
-
         self.point_cloud_camera_orientation = [0, 90, 90]
 
-        # ------------Recording Camera Config------------ #
-
         self.recording_camera_position = [2.7127, -0.11092, 2.26847]
-
         self.recording_camera_orientation = [0.0, 30.0, 150.0]
 
-        # ------------Garment Config------------ #
-
-        # Please make sure the length of (position/orientation/scale) array
-        # exactly match the garment num
         self.garment_num = 5
-
         self.garment_position = [
             [0.0, 1.55, 1.5],
             [0.3, 1.55, 1.3],
@@ -125,7 +63,6 @@ class SofaSceneConfig:
             [-0.3, 1.55, 1.9],
             [0.0, 1.35, 2.3],
         ]
-
         self.garment_orientation = [
             [0.0, 0.0, 0.0],
             [0.0, 0.0, 0.0],
@@ -135,7 +72,6 @@ class SofaSceneConfig:
             [0.0, 0.0, 0.0],
             [0.0, 0.0, 0.0],
         ]
-
         self.garment_scale = [
             [0.0055, 0.0055, 0.0055],
             [0.0055, 0.0055, 0.0055],
@@ -145,8 +81,6 @@ class SofaSceneConfig:
             [0.0055, 0.0055, 0.0055],
             [0.0055, 0.0055, 0.0055],
         ]
-
-        # Garment_Usd_Path(no need to change)
         self.clothpath = {
             "cloth0": "/home/pakwa/GPs/GarmentLab"
             + "/Assets/Garment/Dress/Long_NoSleeve/DLNS_Dress003_0/DLNS_Dress003_0_obj.usd",

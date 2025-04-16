@@ -41,7 +41,6 @@ class WrapGarment:
         self.garment_num = garment_num
         self.garment_group = []
         random_numbers = random.sample(range(0, 100), garment_num)
-
         for i in range(garment_num):
             # define key to get specific garment_usd_path
             key = f"cloth{random_numbers[i]}"
@@ -135,7 +134,7 @@ class Garment:
             enable_ccd=True,
             global_self_collision_enabled=True,
             non_particle_collision_enabled=True,
-            solver_position_iteration_count=32,  # 求解器迭代次数 可以提高碰撞求解精度 16
+            solver_position_iteration_count=20,  # 求解器迭代次数 可以提高碰撞求解精度 16
             # ----optional parameter---- #
             # contact_offset=0.01,  # 接触偏移
             # rest_offset=0.008,    # 静止偏移
@@ -146,12 +145,12 @@ class Garment:
         # particle material
         self.particle_material = ParticleMaterial(
             prim_path=self.particle_material_path,
-            friction=0.0,
+            friction=0.0, # 设为1.0
             drag=0.0,
-            lift=0.3,
+            lift=0.3,   # 设为0
             particle_friction_scale=1.0,
             particle_adhesion_scale=1.0,
-            # damping=0.0,
+            # damping=0.0, # 设为10.0
         )
 
         # bind particle material to particle system
@@ -179,10 +178,10 @@ class Garment:
             prim_path=self.garment_mesh_prim_path,
             particle_system=self.particle_system,
             particle_material=self.particle_material,
-            particle_mass=0.05,
+            particle_mass=0.04,  # 0.05
             stretch_stiffness=1e15,
-            bend_stiffness=5.0,
-            shear_stiffness=5.0,
+            bend_stiffness=4.0,  # 5.0
+            shear_stiffness=4.0,    # 5.0
             spring_damping=20.0,  # 10
         )
         # get particle controller
