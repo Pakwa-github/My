@@ -112,6 +112,11 @@ class Collision_Group:
         )  # washingmachine_model can't collide with attach Object
         # self.filter_special.AddTarget(self.garment_group_path)
 
+        # # me
+        # self.collectionAPI_attach.CreateIncludesRel().AddTarget(
+        #     "/World/AttachmentBlock"
+        # )
+
     def update_after_attach(self):
         # push attachmentblock to the target group
         self.collectionAPI_attach.CreateIncludesRel().AddTarget(

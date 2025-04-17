@@ -2,6 +2,7 @@ import warnings
 from typing import Any, ClassVar, Dict, Optional, Type, TypeVar, Union
 
 import numpy as np
+from termcolor import cprint
 import torch as th
 from gymnasium import spaces
 from torch.nn import functional as F
@@ -112,8 +113,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             tensorboard_log=tensorboard_log,
             supported_action_spaces=supported_action_spaces,
         )
-        # self.make_env_fn = make_env_fn
-        # self.sim_env = make_env_fn()
         self.sim_env = sim_env
         self.n_steps = n_steps
         self.gamma = gamma
@@ -123,14 +122,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self.max_grad_norm = max_grad_norm
         self.rollout_buffer_class = rollout_buffer_class
         self.rollout_buffer_kwargs = rollout_buffer_kwargs or {}
+        self.step_num = 0
 
         if _init_setup_model:
             self._setup_model()
-
-    # def reset_env(self):
-    #     """💡 每次都 new 一个新的 sim_env"""
-    #     print("🔄 Resetting simulation environment from scratch...")
-    #     self.sim_env = self.make_env_fn()
 
     def _setup_model(self) -> None:
         self._setup_lr_schedule()
@@ -214,7 +209,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
             succ_list.append(rewards)
             succ_rate = sum(succ_list)/len(succ_list)
-            print("evaluation success rate:", succ_rate)
+            cprint(f"n_steps:{n_steps}\nevaluation success rate:{succ_rate}", "green")
 
     def collect_rollouts(
         self,
@@ -222,6 +217,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         callback: BaseCallback,
         rollout_buffer: RolloutBuffer,
         n_rollout_steps: int,
+        MyFlag: bool = True,
     ) -> bool:
         """
         Collect experiences using the current policy and fill a ``RolloutBuffer``.
@@ -252,11 +248,16 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         callback.on_rollout_start()
 
         while n_steps < n_rollout_steps:
+            # try:
             last_obs = self.sim_env.get_obs() # ！me
+            # except Exception as e:
+            #     print("Error in getting observation:", e)
+            #     n_steps += 1
+            #     continue
+
             if self.use_sde and self.sde_sample_freq > 0 and n_steps % self.sde_sample_freq == 0:
                 # Sample a new noise matrix
                 self.policy.reset_noise(num_envs)
-
             with th.no_grad():
                 # Convert to pytorch tensor or to TensorDict
                 obs_tensor = obs_as_tensor(last_obs, self.device)
@@ -282,8 +283,13 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             #         # as we are sampling from an unbounded Gaussian distribution
             #         clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
 
-            new_obs, rewards, dones, infos = self.sim_env.step(clipped_actions)
-
+            # try:
+            new_obs, rewards, dones, infos = self.sim_env.step(clipped_actions, flag=MyFlag)
+            # except Exception as e:
+            #     print("Error in stepping the environment:", e)
+            #     rewards = 0
+            #     dones = np.array([True])
+            self.step_num += 1
             self.num_timesteps += num_envs
 
             # Give access to local variables
@@ -396,12 +402,20 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             progress_bar,
         )
 
+        import time
+        from datetime import timedelta
+        start_time = time.time()
+
         callback.on_training_start(locals(), globals())
 
         assert self.env is not None
 
         while self.num_timesteps < total_timesteps:
-            continue_training = self.collect_rollouts(self.env.num_envs, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
+            if self.num_timesteps <= total_timesteps: # me
+                MyFlag = True
+            else:
+                MyFlag = False
+            continue_training = self.collect_rollouts(self.env.num_envs, callback, self.rollout_buffer, n_rollout_steps=self.n_steps, MyFlag=MyFlag)
 
             if not continue_training:
                 break
@@ -417,7 +431,16 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             rollout_data = self.get_rollout_data()
 
             self.train(rollout_data)
+            
             print("training iteration finish:", iteration)
+            if self.num_timesteps % (log_interval * self.n_steps) < self.n_steps:
+                elapsed = time.time() - start_time
+                progress = self.num_timesteps / total_timesteps
+                est_total_time = elapsed / progress
+                est_remaining_time = est_total_time - elapsed
+                print(f"[Time Estimator] {self.num_timesteps}/{total_timesteps} timesteps | "
+                  f"Elapsed: {timedelta(seconds=int(elapsed))} | "
+                  f"Remaining: {timedelta(seconds=int(est_remaining_time))}")
 
         callback.on_training_end()
 

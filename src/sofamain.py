@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 
@@ -10,7 +11,7 @@ import torch
 import yaml
 from RL.MyPPO import PPO
 from RL.RLEnv import RlEnvBase
-from RL.SaveModel import save
+# from RL.SaveModel import custom_load, save
 # from RL.SimEnv import SimEnv
 # from RL.TaskDefine import FoldTask
 import carb
@@ -21,6 +22,19 @@ matplotlib.use("TkAgg")  # 或 Qt5Agg 等
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+import threading
+import time
+def monitor_training(model, check_interval=200):
+    cprint("监控线程启动！！","green")
+    last_step = model.step_num
+    while True:
+        time.sleep(check_interval)
+        if model.step_num <= last_step:
+            print("⚠️ 训练似乎卡住，正在保存模型checkpoint...")
+            save(model, "./model/ppo_checkpoint_on_stall.zip")
+            print("保存成功")
+        last_step = model.step_num
 
 def rgb_periodic_saver(camera, interval_sec=60):
     count = 0
@@ -38,7 +52,7 @@ def make_sim_env():
 def init():
     # 初始化环境
     env = SofaSimEnv()
-    env.get_obs()
+    # env.get_obs()
     rl_env = RlEnvBase(headless=False)
     rl_env.set_task(MyTask(), backend="torch")
 
@@ -46,7 +60,7 @@ def init():
     import threading
     display_thread = threading.Thread(target=rgb_periodic_saver, args=(env.point_cloud_camera,))
     display_thread.daemon = True
-    display_thread.start()
+    # display_thread.start()
     
     # 初始化PPO模型
     model = PPO(
@@ -54,8 +68,8 @@ def init():
         sim_env=env,
         env=rl_env,
         learning_rate=1e-4,
-        n_steps=16*5,     # 一次rollout 走16步 感觉不够啊
-        batch_size=16*4,  # 每次更新中使用的样本数量
+        n_steps=16,     # 一次rollout 走16步 感觉不够啊
+        batch_size=16,  # 每次更新中使用的样本数量
         n_epochs=3,     # 一个batch批次内进行优化轮次的数量 1
         gamma=0.99,
         normalize_advantage=True,   # 是否对优势进行归一化
@@ -69,31 +83,118 @@ def init():
     
     return model, env
 
+def save(
+    model:PPO,
+    path,
+    exclude = None,
+    include = None,
+) -> None:
+    data = model.__dict__.copy()
+
+    if exclude is None:
+        exclude = []
+    exclude = set(exclude).union(model._excluded_save_params())
+
+    if include is not None:
+        exclude = exclude.difference(include)
+
+    state_dicts_names, torch_variable_names =model._get_torch_save_params()
+    all_pytorch_variables = state_dicts_names + torch_variable_names
+    for torch_var in all_pytorch_variables:
+        var_name = torch_var.split(".")[0]
+        exclude.add(var_name)
+
+    for param_name in exclude:
+        data.pop(param_name, None)
+
+    # 非核心 torch 变量（例如优化器状态、某些内部计数器或者临时变量
+    # 如果你需要恢复优化器状态或其他内部变量 那么注释部分的代码就很重要 
+    # 会出现所谓的“冷启动”现象，即优化器状态丢失，虽然这在强化学习中通常不至于影响最终表现太多
+    # # Build dict of torch variables
+    # pytorch_variables = None
+    # if torch_variable_names is not None:
+    #     pytorch_variables = {}
+    #     for name in torch_variable_names:
+    #         attr = recursive_getattr(self, name)
+    #         pytorch_variables[name] = attr
+
+    params_to_save = model.get_parameters()
+    torch.save(params_to_save, path)
+
 if __name__ == "__main__":
-    model, env = init()
     
-    mode = "train"
-    assert mode in ["train", "eval"]
-    
+    mode = "retrain"
+    assert mode in ["train", "eval", "retrain", "sb3"]
+    cprint(f"当前mode {mode}", "green")
+
     if mode == "train":
+        
+        model, env = init()
+
+        monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
+        monitor_thread.daemon = True
+        monitor_thread.start()
+
+        from stable_baselines3.common.callbacks import CheckpointCallback
+        checkpoint_callback = CheckpointCallback(
+            save_freq=16,
+            save_path="./checkpoints/",
+            name_prefix="ppo_model"
+        )
+
         # 训练模型
         cprint("\nTraining model...\n\nTraining model...\n\nTraining model...\n", "red")
-        model.learn(total_timesteps=160*5)
-        # 保存模型
-        save(model, "./model/SofaGrasp.ckpt")
-    else:
+        try:
+            model.learn(total_timesteps=1600, callback=checkpoint_callback)
+        except Exception as e:
+            print("⚠️ Training interrupted by error:", e)
+            print("🔁 Saving model before exit...")
+            cprint(model.step_num, "green")
+            save(model, "./model/GL_mid.zip")
+            model.save("./model/sb3_mid.zip")
+            raise
+
+        print("success Saving model...")
+        save(model, "./model/GL.zip")
+        model.save("./model/sb3.zip")
+
+    elif mode == "retrain":
+        if os.path.exists("./model/gl_56 copy.zip"):
+            print("🪄 从断点恢复训练")
+            model, _ = init()
+            # checkpoint = torch.load("./model/gl_56 copy.zip", map_location=model.device)
+            # model.set_parameters(checkpoint)
+            loaded_data = torch.load("./model/gl_56 copy.zip")
+            model.policy.load_state_dict(loaded_data["policy"])
+
+            monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
+            monitor_thread.daemon = True
+            monitor_thread.start()
+            cprint("\nReTraining model...\n\nReTraining model...\n\nReTraining model...\n", "red")
+            try:
+                model.learn(total_timesteps=160)
+            except Exception as e:
+                print("⚠️ Training interrupted by error:", e)
+                print("🔁 Saving model before exit...")
+                cprint(model.step_num, "green")
+                save(model, "./model/gl_mid.zip")
+                raise
+            print("Saving model...")
+            save(model, "./model/gl_fin.zip")
+        else:
+            print("no that")
+
+    elif mode == "eval":
         # 加载模型进行评估
-        loaded_data = torch.load("./model/SofaGrasp.ckpt")
+        model, _ = init()
+        loaded_data = torch.load("./model/ppo_checkpoint_on_crash_56.zip")
         model.policy.load_state_dict(loaded_data["policy"])
-        
-        # 评估模型
-        obs = env.reset()
-        done = False
-        total_reward = 0
-        
-        while not done:
-            action, _ = model.predict(obs)
-            obs, reward, done, info = env.step(action)
-            total_reward += reward
-            
-        print(f"Total reward: {total_reward}")
+        model.eval_policy(num_envs=1, n_rollout_steps=10)
+
+    elif mode == "sb3":
+        sim_env = SofaSimEnv()
+        rl_env = RlEnvBase(headless=False)
+        rl_env.set_task(MyTask(), backend="torch")
+        model = PPO.load("./model/ppo_checkpoint_on_crash_56.zip", env=rl_env, device="cuda:0")
+        model.sim_env = sim_env
+        model.eval_policy(num_envs=1, n_rollout_steps=10)

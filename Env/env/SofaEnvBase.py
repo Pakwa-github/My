@@ -52,6 +52,8 @@ from omni.isaac.core.utils.string import find_unique_string_name
 
 class SofaSimEnvBase:
     def __init__(self):
+        self.path = os.getcwd()
+
         self.world = World(backend="torch", device="cpu")  # ! important
         set_camera_view(
             eye=[-2.0, 1.1, 1.8],
@@ -72,10 +74,10 @@ class SofaSimEnvBase:
         # no need default ground plane
         # self.scene.add_default_ground_plane()
         self.config = SofaSceneConfig()
-        self.recording_camera = Recording_Camera(
-            self.config.recording_camera_position,
-            self.config.recording_camera_orientation,
-        )
+        # self.recording_camera = Recording_Camera(
+        #     self.config.recording_camera_position,
+        #     self.config.recording_camera_orientation,
+        # )
         self.point_cloud_camera = Point_Cloud_Camera(
             self.config.point_cloud_camera_position,
             self.config.point_cloud_camera_orientation,
@@ -85,18 +87,19 @@ class SofaSimEnvBase:
             self.world,
             self.config.robot_position,
             self.config.robot_orientation,
-            prim_path=find_unique_string_name("/World/Franka",is_unique_fn=lambda x: not is_prim_path_valid(x)),
+            prim_path=find_unique_string_name("/World/Franka",
+                is_unique_fn=lambda x: not is_prim_path_valid(x)),
             robot_name=find_unique_string_name(initial_name="franka_robot",
                 is_unique_fn=lambda x: not self.world.scene.object_exists(x),),
-            usd_path="/home/pakwa/GPs/My/Assets/Robot/franka.usd",
+            usd_path=self.path + "/Assets/Robot/franka.usd",
         )
-        self.base_layer = Wrap_base(
-            self.config.base_layer_position,
-            self.config.base_layer_orientation,
-            self.config.base_layer_scale,
-            self.config.base_layer_usd_path,
-            self.config.base_layer_prim_path,
-        )
+        # self.base_layer = Wrap_base(
+        #     self.config.base_layer_position,
+        #     self.config.base_layer_orientation,
+        #     self.config.base_layer_scale,
+        #     self.config.base_layer_usd_path,
+        #     self.config.base_layer_prim_path,
+        # )
         self.basket = Wrap_basket(
             self.config.basket_position,
             self.config.basket_orientation,
@@ -148,21 +151,17 @@ class SofaSimEnvBase:
         cprint("world load successfully", "green", on_color="on_green")
         # initialize camera
         self.point_cloud_camera.initialize(self.config.garment_num)
-        self.recording_camera.initialize()
+        # self.recording_camera.initialize()
         cprint("camera initialize successfully", "green")
         # begin to record gif
-        gif_generation_thread = threading.Thread(
-            target=self.recording_camera.get_rgb_graph
-        )
+        # gif_generation_thread = threading.Thread(
+        #     target=self.recording_camera.get_rgb_graph
+        # )
         # gif_generation_thread.start()
 
         self.garment_transportation()
         cprint("garment transportation finish!", "green")
-        # ?
-        for garment in self.wrapgarment.garment_group:
-            garment.particle_material.set_friction(1.0)
-            garment.particle_material.set_damping(10.0)
-            garment.particle_material.set_lift(0.0)
+
         # delete helper
         delete_prim(f"/World/transport_helper/transport_helper_1")
         delete_prim(f"/World/transport_helper/transport_helper_2")
@@ -170,14 +169,12 @@ class SofaSimEnvBase:
         delete_prim(f"/World/transport_helper/transport_helper_4")
         delete_prim(f"/World/transport_helper/transport_helper_5")
         delete_prim(f"/World/transport_helper")
-        self.franka.return_to_initial_position(self.config.initial_position)
-        self.create_attach_block()
+        # self.franka.return_to_initial_position(self.config.initial_position)
+        self.create_attach_block()  # !害死我啦！
         cprint("world ready!", "green", on_color="on_green")
 
-        # self.robots = [self.franka]
         self.garments = self.wrapgarment.garment_group
-        # self.control = Control(self.world, self.robots, self.garments)
-        filename = "/home/pakwa/GPs/My/RL/config/config0084.yaml"
+        filename = self.path + "/RL/config/config0084.yaml"
         with open(filename, 'r') as file:
             task_config = yaml.safe_load(file)
         self.task_config = task_config
@@ -185,16 +182,18 @@ class SofaSimEnvBase:
         self.demo_point = np.array(self.task_config["demo_point"])
         self.garment_name = self.task_config["garment_name"]
         self.task_name = self.task_config["task_name"]
-        # self.garment_positions = []
-        # self.garment_orientations = []
         self.num_garments = self.config.garment_num
 
         self.centroid = np.zeros(3)
         self.successful_grasps = 0
         self.target_grasp_num = self.config.garment_num
         self.fail_num = 0
-
-
+        self.no_cloud_point = False
+        
+        # self.attach = None 
+        # self.world.reset()
+  
+    
     def garment_transportation(self):
         """
         Let the clothes fly onto the sofa
@@ -203,7 +202,7 @@ class SofaSimEnvBase:
         # change gravity direction
         self.scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1))
         self.scene.CreateGravityMagnitudeAttr().Set(15)
-        for i in range(100):
+        for i in range(50):
             self.world.step(render=True)
 
     def create_attach_block(self, init_position=np.array([0.0, 0.0, 1.0]), scale=None):
@@ -215,6 +214,7 @@ class SofaSimEnvBase:
             self.stage,
             "/World/AttachmentBlock",
             self.wrapgarment.garment_mesh_path,
+            self.collision.collectionAPI_attach,
         )
         from omni.isaac.core.utils.prims import is_prim_path_valid
         from omni.isaac.core.utils.string import find_unique_string_name
@@ -223,12 +223,22 @@ class SofaSimEnvBase:
                 is_unique_fn=lambda x: not self.world.scene.object_exists(x),),
             block_position=init_position,
             block_visible=False,
-            scale=scale,
+            scale=None,
         )
         self.collision.update_after_attach()
-        for i in range(50):
-            self.world.step(render=True)
-        cprint("attach block create successfully", "green")
+        for i in range(5):
+            self.world.step(render=False)
+        return None
+    
+        
+    def set_attach_to_garment(self, attach_position):
+        """
+        push attach_block to new grasp point and attach to the garment
+        """
+        self.attach.set_block_position(attach_position)
+        self.attach.attach()
+        self.world.step(render=True)
+        # cprint("attach block set successfully", "green")
 
     def set_physics_scene(self):
         """配置物理仿真参数"""
@@ -241,4 +251,10 @@ class SofaSimEnvBase:
         #     self.physics.set_solver_type("TGS")
         #     self.physics.set_gpu_max_rigid_contact_count(10240000)
         #     self.physics.set_gpu_max_rigid_patch_count(10240000)
+        # 设置 GPU 处理软体（可变形物体）时允许的最大接触点数量，防止由于过多接触点导致内存或性能问题
+        self.physics.set_gpu_max_soft_body_contacts(1024000)
+        # GPU 碰撞堆栈（collision stack）是物理引擎内部用于存储和处理所有碰撞检测结果的数据结构。
+        # 在 GPU 加速的物理计算中，碰撞堆栈会存储所有检测到的碰撞接触数据，
+        # 并在后续步骤中对这些数据进行处理，比如碰撞响应、摩擦计算等。
+        self.physics.set_gpu_collision_stack_size(3000000)
         carb.log_info("物理仿真参数已设置。")

@@ -13,7 +13,8 @@ from omni.isaac.core.utils.prims import delete_prim
 
 class AttachmentBlock:
     def __init__(
-        self, world, stage, prim_path="/World/AttachmentBlock", garment_path=None
+        self, world, stage, prim_path="/World/AttachmentBlock/attach", 
+        garment_path=None, collision_group=None
     ):
         """
         Args:
@@ -28,7 +29,9 @@ class AttachmentBlock:
         self.attachment_path_list = []
         for i in range(self.garment_num):
             self.attachment_path_list.append(garment_path[i] + f"/mesh/attachment")
+        self.collision_group=collision_group
 
+    # 你真的要害死我啦！！！！！！
     def create_block(self, block_name, block_position, block_visible, scale=None):
         self.block_path = self.root_prim_path + "/" + block_name
         if scale is None:
@@ -52,6 +55,10 @@ class AttachmentBlock:
         # self.move_block_controller.disable_gravities()
         # or you can choose to make block be affected by gravity
         # self.move_block_controller.enable_gravities()
+
+        # me
+        # self.collision_group.CreateIncludesRel().AddTarget(self.block_path)
+
         return self.move_block_controller
 
     def attach(self):
@@ -74,6 +81,7 @@ class AttachmentBlock:
         # delete all the attachment related to the cube
         for i in range(self.garment_num):
             delete_prim(self.attachment_path_list[i])
+        # delete_prim(self.block_path)
 
     def set_block_position(
         self, grasp_point, grasp_orientations=torch.Tensor([1.0, 0.0, 0.0, 0.0])

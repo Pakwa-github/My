@@ -1,5 +1,5 @@
 from isaacsim import SimulationApp
-hl = False
+hl = True
 simulation_app = SimulationApp({"headless": hl})
 
 
@@ -78,9 +78,12 @@ from omni.isaac.core.utils.string import find_unique_string_name
 class SofaSimEnv(SofaSimEnvBase):
     def __init__(self):
         super().__init__()
+        self.step_num = 0
 
     def reset(self):
-        print("🔁 Resetting simulation environment...")
+        self.step_num = 0
+        self.franka._robot.initialize()
+        self.world.step(render=True)
         self.franka.return_to_initial_position(self.config.initial_position)
         load_sofa_transport_helper(self.world)
         for garment in self.garments:
@@ -107,35 +110,35 @@ class SofaSimEnv(SofaSimEnvBase):
         self.successful_grasps = 0
         self.last_grasped_idx = -1
         self.fail_num = 0
+        self.no_cloud_point = False
+
         self.garment_transportation()
-        for garment in self.wrapgarment.garment_group:
-            garment.particle_material.set_friction(1.0)
-            garment.particle_material.set_damping(10.0)
-            garment.particle_material.set_lift(0.0)
-        for _ in range(20):
-            self.world.step(render=True)
         delete_prim(f"/World/transport_helper/transport_helper_1")
         delete_prim(f"/World/transport_helper/transport_helper_2")
         delete_prim(f"/World/transport_helper/transport_helper_3")
         delete_prim(f"/World/transport_helper/transport_helper_4")
         delete_prim(f"/World/transport_helper/transport_helper_5")
         delete_prim(f"/World/transport_helper")
-        for _ in range(20):
+        self.world.step(render=True)
+        self.point_cloud_camera.initialize(self.num_garments)
+        for _ in range(15):
             self.world.step(render=True)
-        print("✅ Environment reset done.")
-        return self.get_obs(), {}
+        cprint("🔁 Environment reset done.", "green")
+        obs = self.get_obs()
+        return obs, {}
 
     def get_obs(self):
         point_cloud, _ = self.point_cloud_camera.get_point_cloud_data(sample_flag=True, sample_num=1024)
         if point_cloud is None or len(point_cloud) == 0:
             # 返回全 0 状态
-            return np.zeros((1024, 3), dtype=np.float32)
+            self.no_cloud_point = True
+            return np.zeros((256, 3), dtype=np.float32)
         point_cloud = np.array(point_cloud)
         self.centroid = np.mean(point_cloud, axis=0)
 
-        cprint(f"相机位置: {self.point_cloud_camera.camera_position}", "magenta")
+        # cprint(f"相机位置: {self.point_cloud_camera.camera_position}", "magenta")
         cprint(f"点云中心: {np.mean(point_cloud, axis=0)}", "magenta")
-        self.print_cloth_region()
+        # self.print_cloth_region()
 
         normalized_point_cloud = point_cloud - self.centroid
         if normalized_point_cloud.shape[0] > 256:
@@ -143,6 +146,7 @@ class SofaSimEnv(SofaSimEnvBase):
         elif normalized_point_cloud.shape[0] < 256:
             pad = np.zeros((256 - normalized_point_cloud.shape[0], 3), dtype=np.float32)
             normalized_point_cloud = np.concatenate([normalized_point_cloud, pad], axis=0)
+        self.no_cloud_point = False
         return normalized_point_cloud.astype(np.float32)
 
 
@@ -151,26 +155,16 @@ class SofaSimEnv(SofaSimEnvBase):
         """执行一步动作"""
         """eval_succ:切换train和eval的逻辑"""
         """flag: 是否启用get_point"""
-
+        self.franka.return_to_initial_position(self.config.initial_position)
         reward = 0
         done = False
-
         action = action.reshape(-1)
-        # 增加归一化处理
-        self.clip = 0.1 + self.successful_grasps * 0.1 
-        scaled_action = np.clip(action, -self.clip, self.clip)
-        candidate = scaled_action + self.centroid
-        print(f"PPO action: {action}, scaled: {scaled_action}")
+        candidate = action + self.centroid
         print(f"当前质心: {self.centroid}, candidate: {candidate}")
+        reward += self.compute_reward_pick_point(candidate)
+
         grasp_point = self.get_point(candidate, flag)
-        print(f"最终抓取点: {grasp_point}")
-        reward += self.compute_reward_pick_point(grasp_point, flag)
-        
-        judge_thread = threading.Thread(
-            target=self.recording_camera.judge_contact_with_ground,
-            args=("Data/Sofa//Record.txt",),
-        )
-        judge_thread.start()
+        cprint(f"最终抓取点: {grasp_point}, 得分为 {reward}", "yellow")
         
         self.set_attach_to_garment(attach_position=grasp_point)
         target_positions = copy.deepcopy(self.config.target_positions)
@@ -179,53 +173,65 @@ class SofaSimEnv(SofaSimEnvBase):
         )
         if not fetch_result:
             self.fail_num += 1
-            cprint("failed", "red")
+            cprint("fetch failed, 惩罚-3", "red")
             self.attach.detach()
-            self.franka.open()
-            self.franka.return_to_initial_position(self.config.initial_position)
-            for _ in range(50):
+            # self.attach = None
+            try:
+                self.franka.open()
+            except Exception as e:
+                cprint(e, "red")
+                cprint("cant open", "red")
+            try:
+                self.franka.return_to_initial_position(self.config.initial_position)
+            except Exception as e:
+                cprint(e, "red")
+                cprint("cant return to initial", "red")
+                self.franka._robot.initialize()
+            for _ in range(10):
                 self.world.step()
             reward += -3
             done = False
             obs = self.get_obs()
             return obs, reward, np.array([done]), {"reason": "cant fetch the point"}
         
-        if self.recording_camera.contact:
-            self.fail_num += 1
-            cprint("触地惩罚！-3", "magenta")
-            reward += -3
-        else:
-            self.successful_grasps += 1
-        self.recording_camera.contact = False
-        self.recording_camera.stop_judge_contact()
+        self.successful_grasps += 1
 
         idx, grasped_garment = self.detect_current_grasped_garment()
         if grasped_garment is not None:
             self.last_grasped_idx = idx
         self.attach.detach()
-        self.franka.open()
+        # self.attach = None
+        try:
+            self.franka.open()
+        except Exception as e:
+            pass
         self.franka.return_to_initial_position(self.config.initial_position)
-        for _ in range(100):
+        for _ in range(40):
             self.world.step()
-        if self.last_grasped_idx >= 0:
-            is_in_basket = self.is_garment_in_basket(self.garments[self.last_grasped_idx], self.basket)
+        if grasped_garment is not None:
+            is_in_basket , radio= self.is_garment_in_basket(grasped_garment, self.basket)
+            reward += self.delete_dropped_garments(exclude_idx=self.last_grasped_idx)
         if is_in_basket:
-            cprint("🎉 成功放入篮子！奖励+20", "green")
-            reward += 20
-        if self.last_grasped_idx >= 0:
-            self.remove_garment(self.garments[self.last_grasped_idx])
-    
-        print("one step\n")
+            cprint(f"🎉 成功放入篮子！奖励+{50*(radio-0.6)}", "green")
+            reward += 50*(radio-0.6)
+        else:
+            cprint(f"⚠️ 没放好进篮子！奖励+3", "yellow")
+            reward += 3
+        if grasped_garment is not None: # 这句不能删
+            self.remove_garment(grasped_garment)
+
+        # self.franka._robot.initialize()
+        # delete_prim("/World/AttachmentBlock/attach")
+        # self.world.reset()
+
         info = {"success": reward > 5}
-        if self.num_garments <= 0 or self.successful_grasps >= self.target_grasp_num or self.fail_num >= 20:
+        if self.num_garments <= 0 or self.successful_grasps >= self.target_grasp_num or self.fail_num >= 15:
             done = True
             self.reset()
         obs = self.get_obs()
         return obs, reward, np.array([done]), info
 
-    def compute_reward_pick_point(self, grasp_point, flag):
-        if flag:
-            return 1
+    def compute_reward_pick_point(self, grasp_point):
         """计算抓取动作的奖励"""
         all_points = []
         for garment in self.garments[:self.num_garments]:
@@ -236,11 +242,11 @@ class SofaSimEnv(SofaSimEnvBase):
         dist = np.linalg.norm(all_points - grasp_point, axis=1)
         min_dist = np.min(dist)
         # 粘性半径是0.02
-        reward = 0.04 - min_dist
+        reward = 0.03 - min_dist
         if reward < 0:
-            reward = reward * 6  # 最低约-3分
+            reward = reward*20  # 最低约-10分
         else:
-            reward = 1/(0.2 - reward)  # 最高6.25分
+            reward = 1/(0.3 - reward)  # 最高约5分
         return reward
 
 
@@ -260,14 +266,7 @@ class SofaSimEnv(SofaSimEnvBase):
         idx = np.argmin(dist)
         return all_points[idx]
 
-    def set_attach_to_garment(self, attach_position):
-        """
-        push attach_block to new grasp point and attach to the garment
-        """
-        self.attach.set_block_position(attach_position)
-        self.attach.attach()
-        self.world.step(render=True)
-        cprint("attach block set successfully", "green")
+    
 
     def detect_current_grasped_garment(self):
         """
@@ -300,7 +299,7 @@ class SofaSimEnv(SofaSimEnvBase):
         min_basket, max_basket = basket.get_aabb()
         inside = np.all((points >= min_basket) & (points <= max_basket), axis=1)
         ratio_inside = np.sum(inside) / len(points)
-        return ratio_inside >= threshold
+        return ratio_inside >= threshold, ratio_inside
     
     def remove_garment(self, garment):
         if garment in self.garments:
@@ -310,8 +309,24 @@ class SofaSimEnv(SofaSimEnvBase):
         cprint(f"Garment at {prim_path} removed from scene.", "green")
         self.num_garments -= 1
 
-    
-
+    def delete_dropped_garments(self, exclude_idx=None, threshold_z=0.4, ratio_threshold=0.5):
+        dropped_reward = 0
+        for idx, garment in enumerate(self.garments[:self.num_garments]):
+            if idx == exclude_idx:
+                continue
+            points = garment.get_world_position()
+            if points.size == 0:
+                continue
+            if isinstance(points, torch.Tensor):
+                points = points.detach().cpu().numpy()
+            below_ground = points[:, 2] < threshold_z
+            if np.mean(below_ground) > ratio_threshold:
+                cprint(f"⚠️ 衣物 {idx} 掉落地面！惩罚 -3", "yellow")
+                dropped_reward -= 3
+                if idx >= 0 and self.garments[idx]:
+                    self.remove_garment(self.garments[idx])
+        return dropped_reward
+            
 
 
     # 计算衣物点云包围盒
@@ -358,24 +373,26 @@ class SofaSimEnv(SofaSimEnvBase):
             dist = np.minimum(dist, np.linalg.norm(pcd - pcd_fps_lst[-1], axis=1))
         pcd_fps = np.stack(pcd_fps_lst, axis=0)
         return pcd_fps, fps_idx, dist.max()
-    
-    def compute_reward_result(self):
-        """计算最终结果的奖励"""
-        return 0
 
-    # def _do_stir(self):
-    #     """执行搅拌动作，采用随机扰动当前质心附近多个候选点"""
-    #     cprint("开始搅拌...", "red")
-    #     # 例如，在当前质心附近取一定范围内的 3 个随机扰动点
-    #     stir_offsets = []
-    #     for _ in range(3):
-    #         offset = np.random.uniform(-0.1, 0.1, size=3)
-    #         stir_offsets.append(offset)
-    #     # 对每个扰动点执行机器人移动并等待仿真更新
-    #     for offset in stir_offsets:
-    #         target_point = self.centroid + offset
-    #         for i in target_point:
-    #             self.franka.move(end_loc=i, env_ori=None)
-    #         # 快速仿真若干步
-    #         for _ in range(50):
-    #             self.world.step()
+    def reset_franka_completely(self):
+        try:
+            delete_prim(self.franka._franka_prim_path)  # 删除原始机器人
+            self.world.step(render=True)  # 关键一步：让场景刷新！
+            self.franka = WrapFranka(
+            self.world,
+            self.config.robot_position,
+            self.config.robot_orientation,
+            prim_path=find_unique_string_name("/World/Franka",
+                is_unique_fn=lambda x: not is_prim_path_valid(x)),
+            robot_name=find_unique_string_name(initial_name="franka_robot",
+                is_unique_fn=lambda x: not self.world.scene.object_exists(x),),
+            usd_path=self.path + "/Assets/Robot/franka.usd",
+        )
+            self.franka.return_to_initial_position(self.config.initial_position)
+            print("✅ Franka 重建成功！")
+            return True
+        except Exception as e:
+            print(f"❌ 重建 Franka 失败: {e}")
+            return False
+        
+    

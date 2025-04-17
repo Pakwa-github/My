@@ -82,6 +82,9 @@ class WrapFranka:
         self.pre_error = 0
         self.error_nochange_epoch = 0
 
+        # me
+        self.reset_error = 0
+
     def initialize(self):
         self._robot.initialize()
 
@@ -94,10 +97,14 @@ class WrapFranka:
         return position, orientation
 
     def open(self):
-        self._robot.gripper.open()
+        for _ in range(3):
+            self._robot.gripper.open()
+            self.world.step(render=False)
 
     def close(self):
-        self._robot.gripper.close()
+        for _ in range(3):
+            self._robot.gripper.close()
+            self.world.step(render=False)
 
     def Rotation(self, quaternion, vector):
         q0 = quaternion[0].item()
@@ -139,12 +146,12 @@ class WrapFranka:
     
 
     def RMPflow_Move(self, position, orientation=None):
-        self.world.step(render=True)
-        position = self.to_tensor(position)   # me
-        position = position.cpu().numpy().reshape(-1)
-        if orientation is not None:
-            orientation = euler_angles_to_quat(orientation, degrees=True)
         try:
+            self.world.step(render=True)
+            position = self.to_tensor(position)   # me
+            position = position.cpu().numpy().reshape(-1)
+            if orientation is not None:
+                orientation = euler_angles_to_quat(orientation, degrees=True)
             self.rmpflow.set_end_effector_target(
                 target_position=position, target_orientation=orientation
             )
@@ -155,10 +162,16 @@ class WrapFranka:
             return True
         except Exception as e:
             cprint("❌ RMPflow_Move连续错误，返回失败", "red")
+            self.reset_error += 1
+            if (self.reset_error >= 5):
+                # 复原不了，他的姿势已经寄了
+                self._robot.initialize()
+                for i in range(5):
+                    self.world.step(render=True)
+                cprint("! 机器人已重置！", "yellow")
+                self.reset_error = 0
             return False
-
-    def move(self,end_loc,env_ori=None):
-        self.RMPflow_Move(position=end_loc, orientation=env_ori)
+        
 
     def wm_check_gripper_arrive(
         self,
@@ -244,9 +257,6 @@ class WrapFranka:
             record_success_failure(False, error_record_file, str="franka fly")
         else:
             return True
-        
-    def reach(self,end_loc,env_ori=None):
-        self.check_gripper_arrive(end_loc)
 
     def move_block_follow_gripper(
         self, attach_block, target_position, target_orientation=None
@@ -282,16 +292,21 @@ class WrapFranka:
         self.world.step(render=True)
 
         # reach attach block position
-        self.open()
+        try:
+            self.open()
+        except Exception as e:
+            return False
         position = torch.Tensor(target_positions[0])
-        cprint("start to enter the initial point above sofa", "magenta")
+        # cprint("start to enter the initial point above sofa", "magenta")
         while not self.check_gripper_arrive(position, error_record_file):
             if not self.RMPflow_Move(position):
+                cprint("Wrong in reach initial point!", "red")
                 return False
 
         # catch the block
         reach_position = attach_block.get_block_position().cpu()
         reach_position = reach_position[0]
+        reach_position += np.array([0, 0, 0.005])
         cprint(f"start to reach the fetch point : {reach_position}", "magenta")
         while not self.check_gripper_arrive(reach_position, error_record_file):
             if self.error_nochange_epoch >= 20:
@@ -301,17 +316,17 @@ class WrapFranka:
                 self.error_nochange_epoch = 0
                 return False
             if not self.RMPflow_Move(reach_position):
-                error_epoch += 1
-            else:
-                error_epoch = 0
-
-        self.close()
-        for i in range(30):
+                cprint("Wrong in reach attach position!", "red")
+                return False
+        try:
+            self.close()
+        except Exception as e:
+            return False
+        for i in range(20):
             self.world.step(render=True)
-        cprint(
-            f"start to go to the target push_garment position {target_positions[1]}",
-            "magenta",
-        )
+        # cprint(
+        #     f"start to go to the target push_garment position {target_positions[1]}",
+        #     "magenta",)
         for i in range(len(target_positions)):
             position = torch.Tensor(target_positions[i])
             if i == 0:
@@ -335,9 +350,14 @@ class WrapFranka:
     def return_to_initial_position(self, initial_position, initial_orientation=None):
         initial_position = torch.Tensor(initial_position)
         while not self.check_gripper_arrive(initial_position):
-            self.RMPflow_Move(initial_position, initial_orientation)
-        self.open()
-        print("return to initial position")
+            # 那我问你，如果这个姿势寄了，该怎么办 我好绝望
+            if not self.RMPflow_Move(initial_position, initial_orientation):
+                return
+        try:
+            self.open()
+        except Exception as e:
+            pass
+        # print("return to initial position")
 
     def sofa_pick_place_procedure(self, target_positions, attach_block):  # !!
         self.world.step(render=True)

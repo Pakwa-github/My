@@ -145,8 +145,6 @@ class Point_Cloud_Camera:
 
 
 
-
-
     def get_point_cloud_data(self, sample_flag: bool = False, sample_num: int = 1024):
         """
         get point_cloud's data and color of each point

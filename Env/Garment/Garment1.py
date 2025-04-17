@@ -130,11 +130,11 @@ class Garment:
             prim_path=self.particle_system_path,
             simulation_owner=self.scene.GetPath(),
             # simulation_owner=self.world.get_physics_context().prim_path,
-            particle_contact_offset=0.008,
+            particle_contact_offset=0.01,
             enable_ccd=True,
             global_self_collision_enabled=True,
             non_particle_collision_enabled=True,
-            solver_position_iteration_count=20,  # 求解器迭代次数 可以提高碰撞求解精度 16
+            solver_position_iteration_count=16,  # 求解器迭代次数 可以提高碰撞求解精度 16
             # ----optional parameter---- #
             # contact_offset=0.01,  # 接触偏移
             # rest_offset=0.008,    # 静止偏移
@@ -145,12 +145,12 @@ class Garment:
         # particle material
         self.particle_material = ParticleMaterial(
             prim_path=self.particle_material_path,
-            friction=0.0, # 设为1.0
+            friction=0.5, # 设为1.0   0.3
             drag=0.0,
-            lift=0.3,   # 设为0
+            lift=0.001,   # 设为0   
             particle_friction_scale=1.0,
             particle_adhesion_scale=1.0,
-            # damping=0.0, # 设为10.0
+            damping=7.0, # 设为10.0
         )
 
         # bind particle material to particle system
@@ -179,10 +179,10 @@ class Garment:
             particle_system=self.particle_system,
             particle_material=self.particle_material,
             particle_mass=0.04,  # 0.05
-            stretch_stiffness=1e15,
-            bend_stiffness=4.0,  # 5.0
-            shear_stiffness=4.0,    # 5.0
-            spring_damping=20.0,  # 10
+            stretch_stiffness=1e7,  # 1e15  1e4
+            bend_stiffness=20,  # 5.0    100
+            shear_stiffness=20,    # 5.0  100
+            spring_damping=1,  # 12   0.2
         )
         # get particle controller
         self.particle_controller = self.garment_mesh._cloth_prim_view

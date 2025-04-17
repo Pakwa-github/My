@@ -686,4 +686,4 @@ def write_rgb_image(rgb_data, filename):
 
     image = Image.fromarray(rgb_data)
     image.save(filename)
-    cprint(f"write to .png file successful : {filename}", "magenta")
+    # cprint(f"write to .png file successful : {filename}", "magenta")

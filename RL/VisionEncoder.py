@@ -50,6 +50,12 @@ class PointNetFeaturePropagation(nn.Module):
             new_points = F.relu(x)
         return new_points
 
+# 这个语义编码器看上去主要用于对点云数据做语义理解，
+# 也就是说，它可以尝试判别每个点属于哪个类别或者分割出不同区域的信息。
+# 它也采用了 PointNet 的思想，不过通常会有一个 Softmax 层输出分类概率（或语义标签）。
+# 在代码中，sem_model 的构造参数中有 num_classes（类别数），
+# 表明它的设计初衷是做分类、语义分割相关任务。
+
 class sem_model(nn.Module):
     def __init__(self, num_classes, init_ft = None ,init_pts = 256):
         super(sem_model, self).__init__()
@@ -86,6 +92,14 @@ class sem_model(nn.Module):
         x = self.conv2(x).view(B, -1)
         x = self.soft_max(x)
         return x.view(B, -1)
+
+
+# 这个编码器主要负责将输入的原始点云数据转换成一个较小、更加精炼的特征向量
+# 它使用了基于 PointNet 架构的思想：先用几个“set abstraction”
+# （采样和分组）层从原始点云中提取局部特征；
+# 然后将这些局部特征聚合成全局特征（后面的全连接层），生成尺寸固定的特征向量。
+# 在你的代码中，encoder 是在 forward() 函数中被调用，
+# 直接处理传入的观察数据，输出特征给策略网络后续的 MLP 层使用。
 
 class encoder(nn.Module):
     def __init__(self,num_class,normal_channel=False,pts_list=[512,256,64]):
