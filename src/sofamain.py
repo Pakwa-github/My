@@ -159,35 +159,33 @@ if __name__ == "__main__":
         model.save("./model/sb3.zip")
 
     elif mode == "retrain":
-        if os.path.exists("./model/gl_56 copy.zip"):
-            print("🪄 从断点恢复训练")
-            model, _ = init()
-            # checkpoint = torch.load("./model/gl_56 copy.zip", map_location=model.device)
-            # model.set_parameters(checkpoint)
-            loaded_data = torch.load("./model/gl_56 copy.zip")
-            model.policy.load_state_dict(loaded_data["policy"])
+    
+        print("🪄 从断点恢复训练")
+        model, _ = init()
+        # checkpoint = torch.load("./model/gl_56 copy.zip", map_location=model.device)
+        # model.set_parameters(checkpoint)
+        loaded_data = torch.load("./model/gl_281.zip")
+        model.policy.load_state_dict(loaded_data["policy"])
 
-            monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
-            monitor_thread.daemon = True
-            monitor_thread.start()
-            cprint("\nReTraining model...\n\nReTraining model...\n\nReTraining model...\n", "red")
-            try:
-                model.learn(total_timesteps=160)
-            except Exception as e:
-                print("⚠️ Training interrupted by error:", e)
-                print("🔁 Saving model before exit...")
-                cprint(model.step_num, "green")
-                save(model, "./model/gl_mid.zip")
-                raise
-            print("Saving model...")
-            save(model, "./model/gl_fin.zip")
-        else:
-            print("no that")
+        monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
+        monitor_thread.daemon = True
+        monitor_thread.start()
+        cprint("\nReTraining model...\n\nReTraining model...\n\nReTraining model...\n", "red")
+        try:
+            model.learn(total_timesteps=160)
+        except Exception as e:
+            print("⚠️ Training interrupted by error:", e)
+            print("🔁 Saving model before exit...")
+            cprint(model.step_num, "green")
+            save(model, "./model/gl_mid.zip")
+            raise
+        print("Saving model...")
+        save(model, "./model/gl_fin.zip")
 
     elif mode == "eval":
         # 加载模型进行评估
         model, _ = init()
-        loaded_data = torch.load("./model/ppo_checkpoint_on_crash_56.zip")
+        loaded_data = torch.load("./model/gl_69.zip")
         model.policy.load_state_dict(loaded_data["policy"])
         model.eval_policy(num_envs=1, n_rollout_steps=10)
 
