@@ -93,6 +93,8 @@ It will be encapsulated into Class WrapGarment to generate many garments(gatment
 you can also use Class Garment seperately
 """
 
+# 没有visual_material_usd
+
 
 class Garment:
     def __init__(

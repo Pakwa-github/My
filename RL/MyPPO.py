@@ -674,8 +674,10 @@ class PPO(OnPolicyAlgorithm):
                 advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
             # ratio between old and new policy, should be one at the first iteration
-            # ratio = th.exp(log_prob - old_log_prob)
-            ratio = th.exp(log_prob)
+            ratio = th.exp(log_prob - old_log_prob)
+            # ?
+            # 心脏骤停
+            # ratio = th.exp(log_prob)
 
             # clipped surrogate loss
             """ !me advantages 换成了 returns"""
@@ -722,6 +724,8 @@ class PPO(OnPolicyAlgorithm):
             但可能会使得优势估计出现偏差，并且降低策略多样性。"""
             loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
 
+            # 这是极其危险的！因为你完全放弃了策略梯度优化，变成了用 reward 做监督回归
+            # （像个 fake baseline classifier），是完全背离 RL 的逻辑的。
             # loss = th.mean(returns,dim = 0)
 
             # Calculate approximate form of reverse KL Divergence for early stopping

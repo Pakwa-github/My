@@ -2,6 +2,7 @@ import os
 import sys
 import time
 
+from RL.MyA2C import MyA2C
 import cv2
 from termcolor import cprint
 sys.path.append("/home/pakwa/My")
@@ -32,6 +33,7 @@ def monitor_training(model, check_interval=200):
         time.sleep(check_interval)
         if model.step_num <= last_step:
             print("⚠️ 训练似乎卡住，正在保存模型checkpoint...")
+            cprint(model.step_num, "green")
             save(model, "./model/ppo_checkpoint_on_stall.zip")
             print("保存成功")
         last_step = model.step_num
@@ -49,6 +51,29 @@ def make_sim_env():
     env = SofaSimEnv()
     return env
 
+
+def returnA2C():
+    env = SofaSimEnv()
+    rl_env = RlEnvBase(headless=False)
+    rl_env.set_task(MyTask(), backend="torch")
+    model = MyA2C(
+        policy="MlpPolicy",
+        sim_env=env,
+        env=rl_env,
+        learning_rate=7e-4,
+        n_steps=8,
+        gamma=0.99,
+        normalize_advantage=True,
+        gae_lambda=1.0,
+        ent_coef=0.005,
+        vf_coef=0.5,
+        max_grad_norm=0.5,
+        tensorboard_log="./tsb/SofaGrasp_A2C",
+        verbose=1,
+        device="cuda:0",
+    )
+    return model, env
+
 def init():
     # 初始化环境
     env = SofaSimEnv()
@@ -62,7 +87,6 @@ def init():
     display_thread.daemon = True
     # display_thread.start()
     
-    # 初始化PPO模型
     model = PPO(
         policy="MlpPolicy",
         sim_env=env,
@@ -89,6 +113,7 @@ def save(
     exclude = None,
     include = None,
 ) -> None:
+    # ?
     data = model.__dict__.copy()
 
     if exclude is None:
@@ -123,29 +148,22 @@ def save(
 
 if __name__ == "__main__":
     
-    mode = "retrain"
-    assert mode in ["train", "eval", "retrain", "sb3"]
+    mode = "trainA2C"
+    assert mode in ["train", "eval", "retrain", "sb3", "trainA2C"]
     cprint(f"当前mode {mode}", "green")
 
     if mode == "train":
         
-        model, env = init()
+        model, _ = init()
 
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
         monitor_thread.daemon = True
         monitor_thread.start()
 
-        from stable_baselines3.common.callbacks import CheckpointCallback
-        checkpoint_callback = CheckpointCallback(
-            save_freq=16,
-            save_path="./checkpoints/",
-            name_prefix="ppo_model"
-        )
-
         # 训练模型
         cprint("\nTraining model...\n\nTraining model...\n\nTraining model...\n", "red")
         try:
-            model.learn(total_timesteps=1600, callback=checkpoint_callback)
+            model.learn(total_timesteps=1600)
         except Exception as e:
             print("⚠️ Training interrupted by error:", e)
             print("🔁 Saving model before exit...")
@@ -162,9 +180,7 @@ if __name__ == "__main__":
     
         print("🪄 从断点恢复训练")
         model, _ = init()
-        # checkpoint = torch.load("./model/gl_56 copy.zip", map_location=model.device)
-        # model.set_parameters(checkpoint)
-        loaded_data = torch.load("./model/gl_281.zip")
+        loaded_data = torch.load("./model/gl_355.zip")
         model.policy.load_state_dict(loaded_data["policy"])
 
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
@@ -196,3 +212,27 @@ if __name__ == "__main__":
         model = PPO.load("./model/ppo_checkpoint_on_crash_56.zip", env=rl_env, device="cuda:0")
         model.sim_env = sim_env
         model.eval_policy(num_envs=1, n_rollout_steps=10)
+
+    elif mode == "trainA2C":
+        
+        model, _ = returnA2C()
+        loaded_data = torch.load("./model/A2C_500?.zip")
+        model.policy.load_state_dict(loaded_data["policy"])
+
+        monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
+        monitor_thread.daemon = True
+        monitor_thread.start()
+
+        # 训练模型
+        cprint("\nTraining model...\n\nTraining model...\n\nTraining model...\n", "red")
+        try:
+            model.learn(total_timesteps=60)
+        except Exception as e:
+            print("⚠️ Training interrupted by error:", e)
+            print("🔁 Saving model before exit...")
+            cprint(model.step_num, "green")
+            save(model, "./model/A2C_mid.zip")
+            raise
+
+        print("success Saving model...")
+        save(model, "./model/A2C.zip")
