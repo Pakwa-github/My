@@ -5,7 +5,7 @@ import numpy as np
 import random
 import omni.kit.commands
 
-from omni.isaac.core.materials.preview_surface import PreviewSurface
+# from omni.isaac.core.materials.preview_surface import PreviewSurface
 from omni.isaac.core.utils.semantics import add_update_semantics, get_semantics
 from omni.isaac.core.utils.rotations import euler_angles_to_quat
 from omni.physx.scripts import physicsUtils, particleUtils
@@ -188,6 +188,7 @@ class Garment:
         )
         # get particle controller
         self.particle_controller = self.garment_mesh._cloth_prim_view
+        # self.apply_visual_material(self.garment_config.visual_material_usd) 不懂
 
     def get_garment_prim_path(self):
         return self.garment_prim_path
@@ -214,7 +215,7 @@ class Garment:
         self.visual_material_prim=prims_utils.get_prim_at_path(self.visual_material_path)
         self.material_prim=prims_utils.get_prim_children(self.visual_material_prim)[0]
         self.material_prim_path=self.material_prim.GetPath()
-        self.visual_material=PreviewSurface(self.material_prim_path)
+        # self.visual_material=PreviewSurface(self.material_prim_path)
 
         self.garment_mesh_prim=prims_utils.get_prim_at_path(self.garment_mesh_prim_path)
         self.garment_submesh=prims_utils.get_prim_children(self.garment_mesh_prim)

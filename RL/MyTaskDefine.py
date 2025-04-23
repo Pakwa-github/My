@@ -35,7 +35,8 @@ class MyTask(BaseTask):
 
         # set the action and observation space for RL
         self.action_space = spaces.Box(
-            np.ones(self._num_actions, dtype=np.float32) * -1.0, np.ones(self._num_actions, dtype=np.float32) * 1.0
+            np.ones(self._num_actions, dtype=np.float32) * -1.0, 
+            np.ones(self._num_actions, dtype=np.float32) * 1.0
         )
         self.observation_space = spaces.Box(
             np.ones(self._num_observations, dtype=np.float32) * -np.Inf,

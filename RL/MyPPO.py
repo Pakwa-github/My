@@ -170,6 +170,9 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self.policy.set_training_mode(False)
 
         n_steps = 0
+        success_count = 0
+        grasp_fail_count = 0
+        dropped = 0
         # rollout_buffer.reset()
         # Sample new weights for the state dependent exploration
         if self.use_sde:
@@ -205,11 +208,24 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             #     return False
 
             # self._update_info_buffer(infos, dones)
-            n_steps += 1
 
+            if infos.get("success", False):
+                success_count += 1
+            if not infos.get("grasp_success", True):
+                grasp_fail_count += 1
+            dropped += infos.get("dropped", 0)
+            n_steps += 1
             succ_list.append(rewards)
-            succ_rate = sum(succ_list)/len(succ_list)
-            cprint(f"n_steps:{n_steps}\nevaluation success rate:{succ_rate}", "green")
+
+        succ_rate = sum(succ_list)/len(succ_list)
+        cprint(f"n_steps:{n_steps}\nevaluation success rate:{succ_rate}", "green")
+        success_rate = success_count / n_steps if n_steps else 0.0
+        cprint(f"[Success Rate] {success_rate:.2%}", "green")
+        fail_rate = grasp_fail_count / n_steps if n_steps else 0.0
+        cprint(f"[Grasp Fail Rate] {fail_rate:.2%}", "red")
+        dropped_rate = dropped / n_steps if n_steps else 0.0
+        cprint(f"[Dropped Rate] {dropped_rate:.2%}", "red")
+
 
     def collect_rollouts(
         self,

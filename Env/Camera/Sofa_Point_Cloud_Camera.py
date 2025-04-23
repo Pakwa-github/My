@@ -6,9 +6,9 @@ pointcloud graph will be used to get which point to catch
 
 import sys
 
-import matplotlib
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
+# import matplotlib
+# matplotlib.use("TkAgg")
+# import matplotlib.pyplot as plt
 
 sys.path.append("Env_Config/")
 import cv2
@@ -20,12 +20,18 @@ from Model.pointnet2_Place_Model import Place_Model
 from Model.pointnet2_Pick_Model import Pick_Model
 from omni.isaac.sensor import Camera
 from omni.isaac.core.utils.rotations import euler_angles_to_quat
+# from Env.Utils.utils import (
+#     get_unique_filename,
+#     record_success_failure,
+#     write_ply,
+#     furthest_point_sampling,
+#     write_ply_with_colors,
+#     write_rgb_image,
+# )
 from Env.Utils.utils import (
     get_unique_filename,
     record_success_failure,
-    write_ply,
     furthest_point_sampling,
-    write_ply_with_colors,
     write_rgb_image,
 )
 import omni.replicator.core as rep

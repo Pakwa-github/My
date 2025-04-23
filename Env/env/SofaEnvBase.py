@@ -93,13 +93,13 @@ class SofaSimEnvBase:
                 is_unique_fn=lambda x: not self.world.scene.object_exists(x),),
             usd_path=self.path + "/Assets/Robot/franka.usd",
         )
-        # self.base_layer = Wrap_base(
-        #     self.config.base_layer_position,
-        #     self.config.base_layer_orientation,
-        #     self.config.base_layer_scale,
-        #     self.config.base_layer_usd_path,
-        #     self.config.base_layer_prim_path,
-        # )
+        self.base_layer = Wrap_base(
+            self.config.base_layer_position,
+            self.config.base_layer_orientation,
+            self.config.base_layer_scale,
+            self.config.base_layer_usd_path,
+            self.config.base_layer_prim_path,
+        )
         self.basket = Wrap_basket(
             self.config.basket_position,
             self.config.basket_orientation,
@@ -237,7 +237,8 @@ class SofaSimEnvBase:
         """
         self.attach.set_block_position(attach_position)
         self.attach.attach()
-        self.world.step(render=True)
+        for _ in range(5):
+            self.world.step(render=True)
         # cprint("attach block set successfully", "green")
 
     def set_physics_scene(self):

@@ -308,6 +308,8 @@ class WrapFranka:
         reach_position = reach_position[0]
         reach_position += np.array([0, 0, 0.005])
         cprint(f"start to reach the fetch point : {reach_position}", "magenta")
+        self.world.step(render=True)
+        self.world.step(render=True)
         while not self.check_gripper_arrive(reach_position, error_record_file):
             if self.error_nochange_epoch >= 20:
                 record_success_failure(

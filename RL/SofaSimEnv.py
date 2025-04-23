@@ -80,7 +80,7 @@ class SofaSimEnv(SofaSimEnvBase):
         super().__init__()
         self.step_num = 0
 
-    def reset(self):
+    def reset(self, a):
         self.step_num = 0
         self.franka._robot.initialize()
         self.world.step(render=True)
@@ -89,7 +89,8 @@ class SofaSimEnv(SofaSimEnvBase):
         for garment in self.garments:
             delete_prim(garment.get_garment_prim_path())
         self.garments.clear()
-        self.config.garment_num = random.choices([5])[0]
+        self.config.garment_num = a
+        # self.config.garment_num = random.choices([5])[0]
         # self.config.garment_num = random.choices([3, 4, 5], [0.1, 0.45, 0.45])[0]
         print(f"garment_num: {self.config.garment_num}")
         self.wrapgarment = WrapGarment(
@@ -156,8 +157,10 @@ class SofaSimEnv(SofaSimEnvBase):
         """eval_succ:切换train和eval的逻辑"""
         """flag: 是否启用get_point"""
         self.franka.return_to_initial_position(self.config.initial_position)
+        self.dropped = 0
         reward = 0
         done = False
+        info = {}
         action = action.reshape(-1)
         candidate = action + self.centroid
         print(f"当前质心: {self.centroid}, candidate: {candidate}")
@@ -174,6 +177,7 @@ class SofaSimEnv(SofaSimEnvBase):
         if not fetch_result:
             self.fail_num += 1
             cprint("fetch failed, 惩罚-3", "red")
+            info["grasp_success"] = False
             self.attach.detach()
             # self.attach = None
             try:
@@ -192,8 +196,11 @@ class SofaSimEnv(SofaSimEnvBase):
             reward += -3
             done = False
             obs = self.get_obs()
-            return obs, reward, np.array([done]), {"reason": "cant fetch the point"}
+            return obs, reward, np.array([done]), {"reason": "cant fetch the point",
+                                                    "grasp_success": False,
+                                                    "dropped": self.dropped}
         
+        info["grasp_success"] = True
         self.successful_grasps += 1
 
         idx, grasped_garment = self.detect_current_grasped_garment()
@@ -213,9 +220,12 @@ class SofaSimEnv(SofaSimEnvBase):
             reward += self.delete_dropped_garments(exclude_idx=self.last_grasped_idx)
         if is_in_basket:
             cprint(f"🎉 成功放入篮子！奖励+{50*(radio-0.6)}", "green")
+            info["success"] = True
             reward += 50*(radio-0.6)
         else:
             cprint(f"⚠️ 没放好进篮子！奖励+3", "yellow")
+            info["success"] = False
+            self.dropped += 1
             reward += 3
         if grasped_garment is not None: # 这句不能删
             self.remove_garment(grasped_garment)
@@ -224,12 +234,54 @@ class SofaSimEnv(SofaSimEnvBase):
         # delete_prim("/World/AttachmentBlock/attach")
         # self.world.reset()
 
-        info = {"success": reward > 5}
+        # info = {"success": reward > 5}
+        info["dropped"] = self.dropped
+
         if self.num_garments <= 0 or self.successful_grasps >= self.target_grasp_num or self.fail_num >= 15:
             done = True
-            self.reset()
+            self.reset(5)
         obs = self.get_obs()
         return obs, reward, np.array([done]), info
+
+
+    def step2(self, action, eval_succ=False, flag=True):
+        reward = 0
+        done = True
+        info = {}
+        action = action.reshape(-1)
+        candidate = action + self.centroid
+        print(f"当前质心: {self.centroid}, candidate: {candidate}")
+        reward += self.compute_reward_pick_point(candidate)
+        grasp_point = self.get_point(candidate, flag)
+        cprint(f"最终抓取点: {grasp_point}, 得分为 {reward}", "yellow")
+        self.set_attach_to_garment(attach_position=grasp_point)
+        idx, grasped_garment = self.detect_current_grasped_garment()
+        points = grasped_garment.get_world_position()
+        points = points.cpu().numpy()
+        centroid = np.mean(points, axis=0)
+        if np.linalg.norm(centroid - grasp_point) > 0.02:
+            reward = min(0.2 / np.linalg.norm(centroid - grasp_point), 10)
+        else :
+            reward = 10
+        self.reset(1)
+        obs = self.get_obs()
+        return obs, reward, np.array([done]), info
+
+
+    def step3(self, action, eval_succ=False, flag=False):
+        reward = 0
+        done = True
+        info = {}
+        action = action.reshape(-1)
+        candidate = action + self.centroid
+        print(f"当前质心: {self.centroid}, candidate: {candidate}")
+        reward += self.compute_reward_pick_point(candidate)
+        grasp_point = self.get_point(candidate, flag)
+        cprint(f"最终抓取点: {grasp_point}, 得分为 {reward}", "yellow")
+        self.reset(5)
+        obs = self.get_obs()
+        return obs, reward, np.array([done]), info
+
 
     def compute_reward_pick_point(self, grasp_point):
         """计算抓取动作的奖励"""
@@ -264,7 +316,29 @@ class SofaSimEnv(SofaSimEnvBase):
             return np.zeros(3)
         dist = np.linalg.norm(all_points - position.reshape(1, -1), axis=1)
         idx = np.argmin(dist)
-        return all_points[idx]
+        nearest_point = all_points[idx]
+        min_z = 0.4360
+        search_radius=0.015
+        if nearest_point[2] > min_z:
+            return nearest_point
+        else:
+            print(f"⚠️ 最近点 z={nearest_point[2]:.4f} 太低，尝试往上找")
+            mask = (
+            (np.abs(all_points[:, 0] - nearest_point[0]) < search_radius) &
+            (np.abs(all_points[:, 1] - nearest_point[1]) < search_radius) &
+            (all_points[:, 2] > min_z)
+            )
+            candidates = all_points[mask]
+            if candidates.shape[0] > 0:
+                # 找离原始位置最近的那个（保证尽量贴合原位置）
+                cand_dist = np.linalg.norm(candidates[:, :2] - position[:2].reshape(1, -1), axis=1)
+                best_idx = np.argmin(cand_dist)
+                better_point = candidates[best_idx]
+                print(f"✅ 找到更高点 z={better_point[2]:.4f}")
+                return better_point
+            else:
+                print("⚠️ 附近没有更高的点，直接用最近的")
+                return all_points[idx]
 
     
 
@@ -311,10 +385,17 @@ class SofaSimEnv(SofaSimEnvBase):
 
     def delete_dropped_garments(self, exclude_idx=None, threshold_z=0.4, ratio_threshold=0.5):
         dropped_reward = 0
-        for idx, garment in enumerate(self.garments[:self.num_garments]):
+        for idx in reversed(range(self.num_garments)):
             if idx == exclude_idx:
                 continue
-            points = garment.get_world_position()
+            garment = self.garments[idx]
+            if garment is None:
+                continue
+            try:
+                points = garment.get_world_position()
+            except Exception as e:
+                cprint(f"⚠️ 无法获取衣物 {idx} 的位置，跳过: {e}", "red")
+                continue
             if points.size == 0:
                 continue
             if isinstance(points, torch.Tensor):
@@ -322,6 +403,7 @@ class SofaSimEnv(SofaSimEnvBase):
             below_ground = points[:, 2] < threshold_z
             if np.mean(below_ground) > ratio_threshold:
                 cprint(f"⚠️ 衣物 {idx} 掉落地面！惩罚 -3", "yellow")
+                self.dropped += 1
                 dropped_reward -= 3
                 if idx >= 0 and self.garments[idx]:
                     self.remove_garment(self.garments[idx])

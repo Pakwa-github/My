@@ -18,15 +18,10 @@ from RL.RLEnv import RlEnvBase
 import carb
 import numpy as np
 
-import matplotlib
-matplotlib.use("TkAgg")  # 或 Qt5Agg 等
-
-import matplotlib.pyplot as plt
-import numpy as np
 
 import threading
 import time
-def monitor_training(model, check_interval=200):
+def monitor_training(model, check_interval=300):
     cprint("监控线程启动！！","green")
     last_step = model.step_num
     while True:
@@ -92,15 +87,15 @@ def init():
         sim_env=env,
         env=rl_env,
         learning_rate=1e-4,
-        n_steps=16,     # 一次rollout 走16步 感觉不够啊
-        batch_size=16,  # 每次更新中使用的样本数量
+        n_steps=8,     # 一次rollout 走16步 感觉不够啊
+        batch_size=8,  # 每次更新中使用的样本数量
         n_epochs=3,     # 一个batch批次内进行优化轮次的数量 1
         gamma=0.99,
         normalize_advantage=True,   # 是否对优势进行归一化
         ent_coef=0.005, # 熵系数 0.01 ～ 0.001 原本是0.01
         vf_coef=0.5,  # 价值函数损失的权重
         max_grad_norm=0.5,
-        tensorboard_log="./tsb/SofaGrasp",
+        tensorboard_log="./tsb/newPPO",
         verbose=1,
         device="cuda:0", 
     )
@@ -148,14 +143,12 @@ def save(
 
 if __name__ == "__main__":
     
-    mode = "trainA2C"
-    assert mode in ["train", "eval", "retrain", "sb3", "trainA2C"]
+    mode = "eval"
+    assert mode in ["train", "eval", "retrain", "sb3", "trainA2C", "evalA2C"]
     cprint(f"当前mode {mode}", "green")
 
     if mode == "train":
-        
         model, _ = init()
-
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
         monitor_thread.daemon = True
         monitor_thread.start()
@@ -180,7 +173,7 @@ if __name__ == "__main__":
     
         print("🪄 从断点恢复训练")
         model, _ = init()
-        loaded_data = torch.load("./model/gl_355.zip")
+        loaded_data = torch.load("./model/GL_ppo448.zip")
         model.policy.load_state_dict(loaded_data["policy"])
 
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
@@ -193,17 +186,17 @@ if __name__ == "__main__":
             print("⚠️ Training interrupted by error:", e)
             print("🔁 Saving model before exit...")
             cprint(model.step_num, "green")
-            save(model, "./model/gl_mid.zip")
+            save(model, "./model/GL_mid.zip")
             raise
         print("Saving model...")
-        save(model, "./model/gl_fin.zip")
+        save(model, "./model/GL_fin.zip")
 
     elif mode == "eval":
         # 加载模型进行评估
         model, _ = init()
-        loaded_data = torch.load("./model/gl_69.zip")
+        loaded_data = torch.load("./model/GL_ppo256.zip")
         model.policy.load_state_dict(loaded_data["policy"])
-        model.eval_policy(num_envs=1, n_rollout_steps=10)
+        model.eval_policy(num_envs=1, n_rollout_steps=30)
 
     elif mode == "sb3":
         sim_env = SofaSimEnv()
@@ -216,7 +209,7 @@ if __name__ == "__main__":
     elif mode == "trainA2C":
         
         model, _ = returnA2C()
-        loaded_data = torch.load("./model/A2C_500?.zip")
+        loaded_data = torch.load("./model/.zip")
         model.policy.load_state_dict(loaded_data["policy"])
 
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
@@ -236,3 +229,10 @@ if __name__ == "__main__":
 
         print("success Saving model...")
         save(model, "./model/A2C.zip")
+
+    elif mode == "evalA2C":
+        # 加载模型进行评估
+        model, _ = returnA2C()
+        # loaded_data = torch.load("./model/A2C_500?.zip")
+        # model.policy.load_state_dict(loaded_data["policy"])
+        model.eval_policy(num_envs=1, n_rollout_steps=30)

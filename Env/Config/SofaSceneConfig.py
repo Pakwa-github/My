@@ -54,6 +54,7 @@ class SofaSceneConfig:
         self.recording_camera_position = [2.7127, -0.11092, 2.26847]
         self.recording_camera_orientation = [0.0, 30.0, 150.0]
 
+        self.visual_material_usd = self.path + "/Assets/Material/linen_Beige.usd"
         self.garment_num = 5
         self.garment_position = [
             [0.0, 1.55, 1.5],

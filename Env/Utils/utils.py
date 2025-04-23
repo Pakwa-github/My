@@ -8,7 +8,7 @@ from omni.isaac.core.utils.rotations import euler_angles_to_quat
 from pxr import UsdGeom, UsdLux, Sdf, Gf, Vt, Usd, UsdPhysics, PhysxSchema
 from omni.isaac.core.utils.prims import delete_prim, set_prim_visibility
 from termcolor import cprint
-from plyfile import PlyData, PlyElement
+# from plyfile import PlyData, PlyElement
 
 # 构建一条传送带，包括底座 + 两侧轨道，用来模拟衣物传输路径
 def load_conveyor_belt(world, i=0, j=0):
@@ -233,64 +233,64 @@ def record_success_failure(flag: bool, file_path, str=""):
         print("No writing")
         return
 
-# 从 .ply 文件中读取裸点云
-def read_ply(filename):
-    """read XYZ point cloud from filename PLY file"""
-    plydata = PlyData.read(filename)
-    pc = plydata["vertex"].data
-    pc_array = np.array([[x, y, z] for x, y, z in pc])
-    return pc_array
+# # 从 .ply 文件中读取裸点云
+# def read_ply(filename):
+#     """read XYZ point cloud from filename PLY file"""
+#     plydata = PlyData.read(filename)
+#     pc = plydata["vertex"].data
+#     pc_array = np.array([[x, y, z] for x, y, z in pc])
+#     return pc_array
 
-# 从 .ply 文件中读取带颜色的点云
-def read_ply_with_colors(filename):
-    plydata = PlyData.read(filename)
-    pc = plydata["vertex"].data
-    pc_array = np.array([[x, y, z] for x, y, z, r, g, b in pc])
-    colors = np.array([[r, g, b] for x, y, z, r, g, b in pc])
-    return pc_array, colors
-
-
-def write_ply(points, filename):
-    """
-    save 3D-points and colors into ply file.
-    points: [N, 3] (X, Y, Z)
-    colors: [N, 3] (R, G, B)
-    filename: output filename
-    """
-    # combine vertices and colors
-    vertices = np.array(
-        [tuple(point) for point in points],
-        dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")],
-    )
-    el = PlyElement.describe(vertices, "vertex")
-    # save PLY file
-    PlyData([el], text=True).write(filename)
+# # 从 .ply 文件中读取带颜色的点云
+# def read_ply_with_colors(filename):
+#     plydata = PlyData.read(filename)
+#     pc = plydata["vertex"].data
+#     pc_array = np.array([[x, y, z] for x, y, z, r, g, b in pc])
+#     colors = np.array([[r, g, b] for x, y, z, r, g, b in pc])
+#     return pc_array, colors
 
 
-def write_ply_with_colors(points, colors, filename):
-    """
-    save 3D-points and colors into ply file.
-    points: [N, 3] (X, Y, Z)
-    colors: [N, 3] (R, G, B)
-    filename: output filename
-    """
-    # combine vertices and colors
-    colors = colors[:, :3]
-    vertices = np.array(
-        [tuple(point) + tuple(color) for point, color in zip(points, colors)],
-        dtype=[
-            ("x", "f4"),
-            ("y", "f4"),
-            ("z", "f4"),
-            ("red", "u1"),
-            ("green", "u1"),
-            ("blue", "u1"),
-        ],
-    )
-    # create PlyElement
-    el = PlyElement.describe(vertices, "vertex")
-    # save PLY file
-    PlyData([el], text=True).write(filename)
+# def write_ply(points, filename):
+#     """
+#     save 3D-points and colors into ply file.
+#     points: [N, 3] (X, Y, Z)
+#     colors: [N, 3] (R, G, B)
+#     filename: output filename
+#     """
+#     # combine vertices and colors
+#     vertices = np.array(
+#         [tuple(point) for point in points],
+#         dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")],
+#     )
+#     el = PlyElement.describe(vertices, "vertex")
+#     # save PLY file
+#     PlyData([el], text=True).write(filename)
+
+
+# def write_ply_with_colors(points, colors, filename):
+#     """
+#     save 3D-points and colors into ply file.
+#     points: [N, 3] (X, Y, Z)
+#     colors: [N, 3] (R, G, B)
+#     filename: output filename
+#     """
+#     # combine vertices and colors
+#     colors = colors[:, :3]
+#     vertices = np.array(
+#         [tuple(point) + tuple(color) for point, color in zip(points, colors)],
+#         dtype=[
+#             ("x", "f4"),
+#             ("y", "f4"),
+#             ("z", "f4"),
+#             ("red", "u1"),
+#             ("green", "u1"),
+#             ("blue", "u1"),
+#         ],
+#     )
+#     # create PlyElement
+#     el = PlyElement.describe(vertices, "vertex")
+#     # save PLY file
+#     PlyData([el], text=True).write(filename)
 
 # 判断某个抓取动作是否影响了其他衣物的位置
 def compare_position_before_and_after(pre_poses, cur_poses, index):
