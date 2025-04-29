@@ -1,5 +1,5 @@
 from isaacsim import SimulationApp
-hl = True
+hl = False
 simulation_app = SimulationApp({"headless": hl})
 
 
@@ -80,7 +80,8 @@ class SofaSimEnv(SofaSimEnvBase):
         super().__init__()
         self.step_num = 0
 
-    def reset(self, a):
+    def reset(self, stage=1):
+        
         self.step_num = 0
         self.franka._robot.initialize()
         self.world.step(render=True)
@@ -89,9 +90,19 @@ class SofaSimEnv(SofaSimEnvBase):
         for garment in self.garments:
             delete_prim(garment.get_garment_prim_path())
         self.garments.clear()
-        self.config.garment_num = a
+
         # self.config.garment_num = random.choices([5])[0]
         # self.config.garment_num = random.choices([3, 4, 5], [0.1, 0.45, 0.45])[0]
+        if stage == 1:
+            self.config.garment_num = 1
+            self.stage1_obs_count = 10
+        elif stage == 2:
+            self.config.garment_num = 2
+        elif stage == 5:
+            self.config.garment_num = 5
+        elif stage == 8:
+            self.config.garment_num = 8
+        
         print(f"garment_num: {self.config.garment_num}")
         self.wrapgarment = WrapGarment(
             self.stage,
@@ -137,9 +148,7 @@ class SofaSimEnv(SofaSimEnvBase):
         point_cloud = np.array(point_cloud)
         self.centroid = np.mean(point_cloud, axis=0)
 
-        # cprint(f"相机位置: {self.point_cloud_camera.camera_position}", "magenta")
         cprint(f"点云中心: {np.mean(point_cloud, axis=0)}", "magenta")
-        # self.print_cloth_region()
 
         normalized_point_cloud = point_cloud - self.centroid
         if normalized_point_cloud.shape[0] > 256:
@@ -169,22 +178,27 @@ class SofaSimEnv(SofaSimEnvBase):
         grasp_point = self.get_point(candidate, flag)
         cprint(f"最终抓取点: {grasp_point}, 得分为 {reward}", "yellow")
         
+
+        if self.config.garment_num == 10:
+            self.stage1_obs_count -= 1
+            if self.stage1_obs_count <= 0:
+                self.reset(self.config.garment_num)
+            obs = self.get_obs()
+            return obs, reward, np.array([done]), {"reason": "stage1 - only point identification"}
+        
+
         self.set_attach_to_garment(attach_position=grasp_point)
         target_positions = copy.deepcopy(self.config.target_positions)
         fetch_result = self.franka.fetch_garment_from_sofa(
             target_positions, self.attach, "Env_Eval/sofa_record.txt",
         )
+        # 失败
         if not fetch_result:
             self.fail_num += 1
             cprint("fetch failed, 惩罚-3", "red")
             info["grasp_success"] = False
             self.attach.detach()
-            # self.attach = None
-            try:
-                self.franka.open()
-            except Exception as e:
-                cprint(e, "red")
-                cprint("cant open", "red")
+            self.franka.open()
             try:
                 self.franka.return_to_initial_position(self.config.initial_position)
             except Exception as e:
@@ -199,25 +213,38 @@ class SofaSimEnv(SofaSimEnvBase):
             return obs, reward, np.array([done]), {"reason": "cant fetch the point",
                                                     "grasp_success": False,
                                                     "dropped": self.dropped}
-        
+        # 失败
+        idx, grasped_garment = self.detect_current_grasped_garment()
+        if grasped_garment is None:
+            self.fail_num += 1
+            cprint("fetch failed, 惩罚-3", "red")
+            info["grasp_success"] = False
+            self.attach.detach()
+            self.franka.open()
+            try:
+                self.franka.return_to_initial_position(self.config.initial_position)
+            except Exception as e:
+                self.franka._robot.initialize()
+            for _ in range(10):
+                self.world.step()
+            reward += -3
+            done = False
+            obs = self.get_obs()
+            return obs, reward, np.array([done]), {"reason": "cant fetch the point",
+                                                    "grasp_success": False,
+                                                    "dropped": self.dropped}
+        # 成功
         info["grasp_success"] = True
         self.successful_grasps += 1
-
-        idx, grasped_garment = self.detect_current_grasped_garment()
-        if grasped_garment is not None:
-            self.last_grasped_idx = idx
+        self.last_grasped_idx = idx
         self.attach.detach()
-        # self.attach = None
-        try:
-            self.franka.open()
-        except Exception as e:
-            pass
+        self.franka.open()
         self.franka.return_to_initial_position(self.config.initial_position)
         for _ in range(40):
             self.world.step()
-        if grasped_garment is not None:
-            is_in_basket , radio= self.is_garment_in_basket(grasped_garment, self.basket)
-            reward += self.delete_dropped_garments(exclude_idx=self.last_grasped_idx)
+        # 衣物判断
+        is_in_basket , radio= self.is_garment_in_basket(grasped_garment, self.basket)
+        reward += self.delete_dropped_garments(exclude_idx=self.last_grasped_idx)
         if is_in_basket:
             cprint(f"🎉 成功放入篮子！奖励+{50*(radio-0.6)}", "green")
             info["success"] = True
@@ -227,19 +254,13 @@ class SofaSimEnv(SofaSimEnvBase):
             info["success"] = False
             self.dropped += 1
             reward += 3
-        if grasped_garment is not None: # 这句不能删
+        if grasped_garment is not None:
             self.remove_garment(grasped_garment)
-
-        # self.franka._robot.initialize()
-        # delete_prim("/World/AttachmentBlock/attach")
-        # self.world.reset()
-
-        # info = {"success": reward > 5}
+        # 后处理
         info["dropped"] = self.dropped
-
         if self.num_garments <= 0 or self.successful_grasps >= self.target_grasp_num or self.fail_num >= 15:
             done = True
-            self.reset(5)
+            self.reset(self.config.garment_num)
         obs = self.get_obs()
         return obs, reward, np.array([done]), info
 
@@ -366,7 +387,7 @@ class SofaSimEnv(SofaSimEnvBase):
     
     def is_garment_in_basket(self, garment, basket, threshold=0.8):
         if garment is None:
-            return False
+            return False, 0
         points = garment.get_world_position()
         if isinstance(points, torch.Tensor):
             points = points.detach().cpu().numpy()

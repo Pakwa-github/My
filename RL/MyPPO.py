@@ -151,7 +151,28 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             self.observation_space, self.action_space, self.lr_schedule, use_sde=self.use_sde, **self.policy_kwargs
         )
         self.policy = self.policy.to(self.device)
+        # Warn when not using CPU with MlpPolicy
+        self._maybe_recommend_cpu()
 
+    def _maybe_recommend_cpu(self, mlp_class_name: str = "ActorCriticPolicy") -> None:
+        """
+        Recommend to use CPU only when using A2C/PPO with MlpPolicy.
+
+        :param: The name of the class for the default MlpPolicy.
+        """
+        policy_class_name = self.policy_class.__name__
+        if self.device != th.device("cpu") and policy_class_name == mlp_class_name:
+            warnings.warn(
+                f"You are trying to run {self.__class__.__name__} on the GPU, "
+                "but it is primarily intended to run on the CPU when not using a CNN policy "
+                f"(you are using {policy_class_name} which should be a MlpPolicy). "
+                "See https://github.com/DLR-RM/stable-baselines3/issues/1245 "
+                "for more info. "
+                "You can pass `device='cpu'` or `export CUDA_VISIBLE_DEVICES=` to force using the CPU."
+                "Note: The model will train, but the GPU utilization will be poor and "
+                "the training might take longer than on CPU.",
+                UserWarning,
+            )
 
     def eval_policy(
         self,
@@ -250,7 +271,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         """
     
         """env(VecEnv)换成了 num_envs，只取这个里面的变量"""
-        # self.reset_env()
         
         # Switch to eval mode (this affects batch norm / dropout)
         self.policy.set_training_mode(False)
@@ -264,12 +284,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         callback.on_rollout_start()
 
         while n_steps < n_rollout_steps:
-            # try:
+
             last_obs = self.sim_env.get_obs() # ！me
-            # except Exception as e:
-            #     print("Error in getting observation:", e)
-            #     n_steps += 1
-            #     continue
 
             if self.use_sde and self.sde_sample_freq > 0 and n_steps % self.sde_sample_freq == 0:
                 # Sample a new noise matrix
@@ -281,30 +297,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 actions, values, log_probs = self.policy(obs_tensor)
             actions = actions.cpu().numpy()
 
-            # Rescale and perform action
-            clipped_actions = actions
+            # Rescale and perform action (direct mapping for your task)
+            clipped_actions = actions  # # For specific task, no need to clip actions
 
-            # GPT:这部分修改体现了你对任务特点（比如动作空间中，直接由仿真软件保证动作有效）的认识，
-            # 减去了部分 SB3 中为应对通用场景而设计的处理，可能更好地适应特定仿真环境的需求。
-            
-            # 是对连续动作空间（Box）的处理，用于确保 action 落在合法范围
-            # 注销了原有的
-            # if isinstance(self.action_space, spaces.Box):
-            #     if self.policy.squash_output:
-            #         # Unscale the actions to match env bounds
-            #         # if they were previously squashed (scaled in [-1, 1])
-            #         clipped_actions = self.policy.unscale_action(clipped_actions)
-            #     else:
-            #         # Otherwise, clip the actions to avoid out of bound error
-            #         # as we are sampling from an unbounded Gaussian distribution
-            #         clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
-
-            # try:
             new_obs, rewards, dones, infos = self.sim_env.step(clipped_actions, flag=MyFlag)
-            # except Exception as e:
-            #     print("Error in stepping the environment:", e)
-            #     rewards = 0
-            #     dones = np.array([True])
             self.step_num += 1
             self.num_timesteps += num_envs
 
@@ -313,50 +309,28 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             if not callback.on_step():
                 return False
 
-            # self._update_info_buffer(infos, dones) # 注销了原有的
+            # self._update_info_buffer(infos, dones) 报错的
             n_steps += 1
 
             if isinstance(self.action_space, spaces.Discrete):
                 # Reshape in case of discrete action
                 actions = actions.reshape(-1, 1)
 
-            # 用于超时终止时使用 value function 做 bootstrap，估算末端奖励。
-            # 注销了原有的
-            # Handle timeout by bootstraping with value function
-            # see GitHub issue #633
-            # for idx, done in enumerate(dones):
-            #     if (
-            #         done
-            #         and infos[idx].get("terminal_observation") is not None
-            #         and infos[idx].get("TimeLimit.truncated", False)
-            #     ):
-            #         terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0]
-            #         with th.no_grad():
-            #             terminal_value = self.policy.predict_values(terminal_obs)[0]  # type: ignore[arg-type]
-            #         rewards[idx] += self.gamma * terminal_value
-
             rollout_buffer.add(
                 last_obs, 
                 actions,
                 rewards,
-                dones,   # 原本：self._last_episode_starts,  # type: ignore[arg-type]
+                dones,
                 values,
                 log_probs,
             )
 
-        #     # 原有的东西
-        #     self._last_obs = new_obs  # type: ignore[assignment]
-        #     self._last_episode_starts = dones
-
-        # with th.no_grad():
-        #     # Compute value for the last timestep
-        #     values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))
-
-
+        # ！
+        with th.no_grad():
+            # Compute value for the last timestep
+            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))
 
         # 计算 GAE、归一化 return、执行 callback（比如 tensorboard logging）
-        """ !!! last value"""
-        # rollout_buffer.compute_returns_and_advantage(last_values=th.tensor([0]), dones=dones)
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
         callback.update_locals(locals())
         callback.on_rollout_end()
@@ -691,17 +665,8 @@ class PPO(OnPolicyAlgorithm):
 
             # ratio between old and new policy, should be one at the first iteration
             ratio = th.exp(log_prob - old_log_prob)
-            # ?
-            # 心脏骤停
-            # ratio = th.exp(log_prob)
 
             # clipped surrogate loss
-            """ !me advantages 换成了 returns"""
-            """ !!! why GPT:一般来说，优势（通常是 TD-residual 或 GAE 计算结果）
-            能帮助消除基线效应和减少方差。这里直接使用 return 
-            可能是基于你对奖励设计或任务反馈的特殊考虑，但也可能会影响训练收敛与稳定性。"""
-            # policy_loss_1 = returns * ratio
-            # policy_loss_2 = returns * th.clamp(ratio, 1 - clip_range, 1 + clip_range)
             policy_loss_1 = advantages * ratio
             policy_loss_2 = advantages * th.clamp(ratio, 1 - clip_range, 1 + clip_range)
             policy_loss = -th.min(policy_loss_1, policy_loss_2).mean()

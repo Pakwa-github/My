@@ -21,7 +21,12 @@ from stable_baselines3.common.distributions import (
     StateDependentNoiseDistribution,
     make_proba_distribution,
 )
-from stable_baselines3.common.preprocessing import get_action_dim, is_image_space, maybe_transpose, preprocess_obs
+from stable_baselines3.common.preprocessing import (
+    get_action_dim,
+    is_image_space,
+    maybe_transpose,
+    preprocess_obs,
+)
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     CombinedExtractor,
@@ -31,7 +36,11 @@ from stable_baselines3.common.torch_layers import (
     create_mlp,
 )
 from stable_baselines3.common.type_aliases import PyTorchObs, Schedule
-from stable_baselines3.common.utils import get_device, is_vectorized_observation, obs_as_tensor
+from stable_baselines3.common.utils import (
+    get_device,
+    is_vectorized_observation,
+    obs_as_tensor,
+)
 
 SelfBaseModel = TypeVar("SelfBaseModel", bound="BaseModel")
 
@@ -56,6 +65,21 @@ class BaseModel(nn.Module):
         ``th.optim.Adam`` by default
     :param optimizer_kwargs: Additional keyword arguments,
         excluding the learning rate, to pass to the optimizer
+
+    基础模型对象：根据观察结果进行预测。
+    对于策略，预测是一个动作。对于批评者，预测是观察结果的估计值。
+    :param 观察空间：环境的观察空间
+    :param 动作空间：环境的动作空间
+    :param features_extractor_class：要使用的特征提取器。
+    :param features_extractor_kwargs：传递给特征提取器的关键字参数。
+    :param features_extractor：用于提取特征的网络
+    （使用图像时为 CNN，否则为 nn.Flatten() 层）
+    :param normalize_images：是否对图像进行归一化，
+    除以 255.0（默认为 True）
+    :param optimizer_class：要使用的优化器，
+    默认为 ``th.optim.Adam``
+    :param optimizer_kwargs：传递给优化器的附加关键字参数，
+    不包括学习率
     """
 
     optimizer: th.optim.Optimizer
@@ -90,7 +114,9 @@ class BaseModel(nn.Module):
         self.features_extractor_class = features_extractor_class
         self.features_extractor_kwargs = features_extractor_kwargs
         # Automatically deactivate dtype and bounds checks
-        if not normalize_images and issubclass(features_extractor_class, (NatureCNN, CombinedExtractor)):
+        if not normalize_images and issubclass(
+            features_extractor_class, (NatureCNN, CombinedExtractor)
+        ):
             self.features_extractor_kwargs.update(dict(normalized_image=True))
 
     def _update_features_extractor(
@@ -112,14 +138,23 @@ class BaseModel(nn.Module):
         if features_extractor is None:
             # The features extractor is not shared, create a new one
             features_extractor = self.make_features_extractor()
-        net_kwargs.update(dict(features_extractor=features_extractor, features_dim=features_extractor.features_dim))
+        net_kwargs.update(
+            dict(
+                features_extractor=features_extractor,
+                features_dim=features_extractor.features_dim,
+            )
+        )
         return net_kwargs
 
     def make_features_extractor(self) -> BaseFeaturesExtractor:
         """Helper method to create a features extractor."""
-        return self.features_extractor_class(self.observation_space, **self.features_extractor_kwargs)
+        return self.features_extractor_class(
+            self.observation_space, **self.features_extractor_kwargs
+        )
 
-    def extract_features(self, obs: PyTorchObs, features_extractor: BaseFeaturesExtractor) -> th.Tensor:
+    def extract_features(
+        self, obs: PyTorchObs, features_extractor: BaseFeaturesExtractor
+    ) -> th.Tensor:
         """
         Preprocess the observation if needed and extract features.
 
@@ -127,7 +162,9 @@ class BaseModel(nn.Module):
         :param features_extractor: The features extractor to use.
         :return: The extracted features
         """
-        preprocessed_obs = preprocess_obs(obs, self.observation_space, normalize_images=self.normalize_images)
+        preprocessed_obs = preprocess_obs(
+            obs, self.observation_space, normalize_images=self.normalize_images
+        )
         return features_extractor(preprocessed_obs)
 
     def _get_constructor_parameters(self) -> Dict[str, Any]:
@@ -161,10 +198,18 @@ class BaseModel(nn.Module):
 
         :param path:
         """
-        th.save({"state_dict": self.state_dict(), "data": self._get_constructor_parameters()}, path)
+        th.save(
+            {
+                "state_dict": self.state_dict(),
+                "data": self._get_constructor_parameters(),
+            },
+            path,
+        )
 
     @classmethod
-    def load(cls: Type[SelfBaseModel], path: str, device: Union[th.device, str] = "auto") -> SelfBaseModel:
+    def load(
+        cls: Type[SelfBaseModel], path: str, device: Union[th.device, str] = "auto"
+    ) -> SelfBaseModel:
         """
         Load model from path.
 
@@ -190,7 +235,9 @@ class BaseModel(nn.Module):
 
         :param vector:
         """
-        th.nn.utils.vector_to_parameters(th.as_tensor(vector, dtype=th.float, device=self.device), self.parameters())
+        th.nn.utils.vector_to_parameters(
+            th.as_tensor(vector, dtype=th.float, device=self.device), self.parameters()
+        )
 
     def parameters_to_vector(self) -> np.ndarray:
         """
@@ -198,7 +245,9 @@ class BaseModel(nn.Module):
 
         :return:
         """
-        return th.nn.utils.parameters_to_vector(self.parameters()).detach().cpu().numpy()
+        return (
+            th.nn.utils.parameters_to_vector(self.parameters()).detach().cpu().numpy()
+        )
 
     def set_training_mode(self, mode: bool) -> None:
         """
@@ -210,7 +259,9 @@ class BaseModel(nn.Module):
         """
         self.train(mode)
 
-    def is_vectorized_observation(self, observation: Union[np.ndarray, Dict[str, np.ndarray]]) -> bool:
+    def is_vectorized_observation(
+        self, observation: Union[np.ndarray, Dict[str, np.ndarray]]
+    ) -> bool:
         """
         Check whether or not the observation is vectorized,
         apply transposition to image (so that they are channel-first) if needed.
@@ -226,14 +277,19 @@ class BaseModel(nn.Module):
             ), f"The observation provided is a dict but the obs space is {self.observation_space}"
             for key, obs in observation.items():
                 obs_space = self.observation_space.spaces[key]
-                vectorized_env = vectorized_env or is_vectorized_observation(maybe_transpose(obs, obs_space), obs_space)
+                vectorized_env = vectorized_env or is_vectorized_observation(
+                    maybe_transpose(obs, obs_space), obs_space
+                )
         else:
             vectorized_env = is_vectorized_observation(
-                maybe_transpose(observation, self.observation_space), self.observation_space
+                maybe_transpose(observation, self.observation_space),
+                self.observation_space,
             )
         return vectorized_env
 
-    def obs_to_tensor(self, observation: Union[np.ndarray, Dict[str, np.ndarray]]) -> Tuple[PyTorchObs, bool]:
+    def obs_to_tensor(
+        self, observation: Union[np.ndarray, Dict[str, np.ndarray]]
+    ) -> Tuple[PyTorchObs, bool]:
         """
         Convert an input observation to a PyTorch tensor that can be fed to a model.
         Includes sugar-coating to handle different observations (e.g. normalizing images).
@@ -255,7 +311,9 @@ class BaseModel(nn.Module):
                     obs_ = maybe_transpose(obs, obs_space)
                 else:
                     obs_ = np.array(obs)
-                vectorized_env = vectorized_env or is_vectorized_observation(obs_, obs_space)
+                vectorized_env = vectorized_env or is_vectorized_observation(
+                    obs_, obs_space
+                )
                 # Add batch dimension if needed
                 observation[key] = obs_.reshape((-1, *self.observation_space[key].shape))  # type: ignore[misc]
 
@@ -269,7 +327,9 @@ class BaseModel(nn.Module):
 
         if not isinstance(observation, dict):
             # Dict obs need to be handled separately
-            vectorized_env = is_vectorized_observation(observation, self.observation_space)
+            vectorized_env = is_vectorized_observation(
+                observation, self.observation_space
+            )
             # Add batch dimension if needed
             observation = observation.reshape((-1, *self.observation_space.shape))  # type: ignore[misc]
 
@@ -286,6 +346,12 @@ class BasePolicy(BaseModel, ABC):
     :param kwargs: keyword arguments passed through to `BaseModel`.
     :param squash_output: For continuous actions, whether the output is squashed
         or not using a ``tanh()`` function.
+
+    基本策略对象。
+    参数大部分与 `BaseModel` 相同；新增内容如下。
+    :param args：传递给 `BaseModel` 的位置参数。
+    :param kwargs：传递给 `BaseModel` 的关键字参数。
+    :param squash_output：对于连续操作，是否使用 ``tanh()`` 函数对输出进行压缩。
     """
 
     features_extractor: BaseFeaturesExtractor
@@ -316,7 +382,9 @@ class BasePolicy(BaseModel, ABC):
                 module.bias.data.fill_(0.0)
 
     @abstractmethod
-    def _predict(self, observation: PyTorchObs, deterministic: bool = False) -> th.Tensor:
+    def _predict(
+        self, observation: PyTorchObs, deterministic: bool = False
+    ) -> th.Tensor:
         """
         Get the action according to the policy for a given observation.
 
@@ -326,6 +394,14 @@ class BasePolicy(BaseModel, ABC):
         :param observation:
         :param deterministic: Whether to use stochastic or deterministic actions
         :return: Taken action according to the policy
+
+        根据给定观察的策略获取操作。
+        默认情况下，提供一个虚拟实现——并非所有 BasePolicy 类
+        都会实现此功能，例如，如果它们是 Actor-Critic 方法中的 Critic。
+
+        :param 观察:
+        :param 确定性: 是否使用随机操作或确定性操作
+        :return: 根据策略采取的操作
         """
 
     def predict(
@@ -347,13 +423,29 @@ class BasePolicy(BaseModel, ABC):
         :param deterministic: Whether or not to return deterministic actions.
         :return: the model's action and the next hidden state
             (used in recurrent policies)
+
+        从观察结果（以及可选的隐藏状态）获取策略动作。
+        包含一些处理不同观察结果的额外操作（例如，对图像进行归一化）。
+
+        :param 观察结果：输入观察结果
+        :param 状态：最后的隐藏状态（可以为 None，用于循环策略）
+        :param 情节开始：最后的掩码（可以为 None，用于循环策略）
+            这对应于情节的开始，
+            此时 RNN 的隐藏状态必须重置。
+        :param 确定性：是否返回确定性动作。
+        :return：模型的动作和下一个隐藏状态
+            （用于循环策略）
         """
         # Switch to eval mode (this affects batch norm / dropout)
         self.set_training_mode(False)
 
         # Check for common mistake that the user does not mix Gym/VecEnv API
         # Tuple obs are not supported by SB3, so we can safely do that check
-        if isinstance(observation, tuple) and len(observation) == 2 and isinstance(observation[1], dict):
+        if (
+            isinstance(observation, tuple)
+            and len(observation) == 2
+            and isinstance(observation[1], dict)
+        ):
             raise ValueError(
                 "You have passed a tuple to the predict() function instead of a Numpy array or a Dict. "
                 "You are probably mixing Gym API with SB3 VecEnv API: `obs, info = env.reset()` (Gym) "
@@ -482,7 +574,11 @@ class ActorCriticPolicy(BasePolicy):
             normalize_images=normalize_images,
         )
 
-        if isinstance(net_arch, list) and len(net_arch) > 0 and isinstance(net_arch[0], dict):
+        if (
+            isinstance(net_arch, list)
+            and len(net_arch) > 0
+            and isinstance(net_arch[0], dict)
+        ):
             warnings.warn(
                 (
                     "As shared layers in the mlp_extractor are removed since SB3 v1.8.0, "
@@ -516,7 +612,9 @@ class ActorCriticPolicy(BasePolicy):
         self.log_std_init = log_std_init
         dist_kwargs = None
 
-        assert not (squash_output and not use_sde), "squash_output=True is only available when using gSDE (use_sde=True)"
+        assert not (
+            squash_output and not use_sde
+        ), "squash_output=True is only available when using gSDE (use_sde=True)"
         # Keyword arguments for gSDE distribution
         if use_sde:
             dist_kwargs = {
@@ -530,10 +628,13 @@ class ActorCriticPolicy(BasePolicy):
         self.dist_kwargs = dist_kwargs
 
         # Action distribution
-        self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
+        self.action_dist = make_proba_distribution(
+            action_space, use_sde=use_sde, dist_kwargs=dist_kwargs
+        )
 
         # !me
         from RL.VisionEncoder import encoder, sem_model
+
         self.encoder = encoder(1024).to(self.device)
         self.sem_encoder = sem_model(1, init_pts=256).to(self.device)
         self.norm = nn.Tanh()
@@ -570,7 +671,9 @@ class ActorCriticPolicy(BasePolicy):
 
         :param n_envs:
         """
-        assert isinstance(self.action_dist, StateDependentNoiseDistribution), "reset_noise() is only available when using gSDE"
+        assert isinstance(
+            self.action_dist, StateDependentNoiseDistribution
+        ), "reset_noise() is only available when using gSDE"
         self.action_dist.sample_weights(self.log_std, batch_size=n_envs)
 
     def _build_mlp_extractor(self) -> None:
@@ -582,7 +685,7 @@ class ActorCriticPolicy(BasePolicy):
         #       net_arch here is an empty list and mlp_extractor does not
         #       really contain any layers (acts like an identity module).
         self.mlp_extractor = MlpExtractor(
-            1024,   # ！me
+            1024,  # ！me
             net_arch=self.net_arch,
             activation_fn=self.activation_fn,
             device=self.device,
@@ -605,10 +708,21 @@ class ActorCriticPolicy(BasePolicy):
             )
         elif isinstance(self.action_dist, StateDependentNoiseDistribution):
             self.action_net, self.log_std = self.action_dist.proba_distribution_net(
-                latent_dim=latent_dim_pi, latent_sde_dim=latent_dim_pi, log_std_init=self.log_std_init
+                latent_dim=latent_dim_pi,
+                latent_sde_dim=latent_dim_pi,
+                log_std_init=self.log_std_init,
             )
-        elif isinstance(self.action_dist, (CategoricalDistribution, MultiCategoricalDistribution, BernoulliDistribution)):
-            self.action_net = self.action_dist.proba_distribution_net(latent_dim=latent_dim_pi)
+        elif isinstance(
+            self.action_dist,
+            (
+                CategoricalDistribution,
+                MultiCategoricalDistribution,
+                BernoulliDistribution,
+            ),
+        ):
+            self.action_net = self.action_dist.proba_distribution_net(
+                latent_dim=latent_dim_pi
+            )
         else:
             raise NotImplementedError(f"Unsupported distribution '{self.action_dist}'.")
 
@@ -639,7 +753,9 @@ class ActorCriticPolicy(BasePolicy):
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)  # type: ignore[call-arg]
 
-    def forward(self, obs: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def forward(
+        self, obs: th.Tensor, deterministic: bool = False
+    ) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Forward pass in all the networks (actor and critic)
 
@@ -657,15 +773,22 @@ class ActorCriticPolicy(BasePolicy):
             latent_vf = self.mlp_extractor.forward_critic(vf_features)
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
-        distribution, mean_action = self._get_action_dist_from_latent(latent_pi)
+        distribution = self._get_action_dist_from_latent(latent_pi)
         actions = distribution.get_actions(deterministic=deterministic)
         log_prob = distribution.log_prob(actions)
-        actions = actions.reshape((-1, *self.action_space.shape))  
+        actions = actions.reshape((-1, *self.action_space.shape))
 
-        return actions, values, log_prob
+        # 映射到你希望的动作区间
+        actions_scaled = actions.clone()
+        actions_scaled[..., 0:2] *= 0.5  # 前两个动作乘0.5 → [-0.5, 0.5]
+        actions_scaled[..., 2] *= 0.2  # 第三个动作乘0.2 → [-0.2, 0.2]
+        # me!
+        return actions_scaled, values, log_prob
 
     def extract_features(  # type: ignore[override]
-        self, obs: PyTorchObs, features_extractor: Optional[BaseFeaturesExtractor] = None
+        self,
+        obs: PyTorchObs,
+        features_extractor: Optional[BaseFeaturesExtractor] = None,
     ) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
         """
         Preprocess the observation if needed and extract features.
@@ -676,7 +799,14 @@ class ActorCriticPolicy(BasePolicy):
             features for the actor and the features for the critic.
         """
         if self.share_features_extractor:
-            return super().extract_features(obs, self.features_extractor if features_extractor is None else features_extractor)
+            return super().extract_features(
+                obs,
+                (
+                    self.features_extractor
+                    if features_extractor is None
+                    else features_extractor
+                ),
+            )
         else:
             if features_extractor is not None:
                 warnings.warn(
@@ -699,8 +829,15 @@ class ActorCriticPolicy(BasePolicy):
 
         if isinstance(self.action_dist, DiagGaussianDistribution):
             # !me
-            log_std = th.tensor([-1]*mean_actions.shape[-1]).to(self.log_std.device).to(self.log_std.dtype)
-            return self.action_dist.proba_distribution(mean_actions, log_std), mean_actions
+            # 多维高斯分布 如果是连续动作，比如机械臂 xyz 位移、点云物体抓取坐标，动作是连续值。
+            # 创建一个固定的 log_std（对数标准差），每个维度是 -1
+            # log_std 决定动作的随机性。-1 表示标准差 e^-1 ≈ 0.36，比较保守。
+            # 缺点：固定 log_std 就相当于不让它根据环境复杂度去学更大的或更小的动作方差，可能限制了策略的探索能力。容易陷入局部最优或者提前收敛。
+            # 优点：如果你想固定策略的动作噪声，或者先调通一版确定性策略，这样做是可以的。
+            # log_std = th.tensor([-1]*mean_actions.shape[-1]).to(self.log_std.device).to(self.log_std.dtype)
+            # return self.action_dist.proba_distribution(mean_actions, log_std), mean_actions
+
+            return self.action_dist.proba_distribution(mean_actions, self.log_std)
         elif isinstance(self.action_dist, CategoricalDistribution):
             # Here mean_actions are the logits before the softmax
             return self.action_dist.proba_distribution(action_logits=mean_actions)
@@ -711,11 +848,15 @@ class ActorCriticPolicy(BasePolicy):
             # Here mean_actions are the logits (before rounding to get the binary actions)
             return self.action_dist.proba_distribution(action_logits=mean_actions)
         elif isinstance(self.action_dist, StateDependentNoiseDistribution):
-            return self.action_dist.proba_distribution(mean_actions, self.log_std, latent_pi)
+            return self.action_dist.proba_distribution(
+                mean_actions, self.log_std, latent_pi
+            )
         else:
             raise ValueError("Invalid action distribution")
 
-    def _predict(self, observation: PyTorchObs, deterministic: bool = False) -> th.Tensor:
+    def _predict(
+        self, observation: PyTorchObs, deterministic: bool = False
+    ) -> th.Tensor:
         """
         Get the action according to the policy for a given observation.
 
@@ -723,9 +864,20 @@ class ActorCriticPolicy(BasePolicy):
         :param deterministic: Whether to use stochastic or deterministic actions
         :return: Taken action according to the policy
         """
-        return self.get_distribution(observation).get_actions(deterministic=deterministic)
+        # return self.get_distribution(observation).get_actions(deterministic=deterministic)
+        # me!
+        actions = self.get_distribution(observation).get_actions(
+            deterministic=deterministic
+        )
+        actions_scaled = actions.clone()
+        actions_scaled[..., 0:2] *= 0.5
+        actions_scaled[..., 2] *= 0.2
 
-    def evaluate_actions(self, obs: PyTorchObs, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor]]:
+        return actions_scaled
+
+    def evaluate_actions(
+        self, obs: PyTorchObs, actions: th.Tensor
+    ) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor]]:
         """
         Evaluate actions according to the current policy,
         given the observations.
@@ -743,7 +895,7 @@ class ActorCriticPolicy(BasePolicy):
             pi_features, vf_features = features
             latent_pi = self.mlp_extractor.forward_actor(pi_features)
             latent_vf = self.mlp_extractor.forward_critic(vf_features)
-        distribution, mean_action = self._get_action_dist_from_latent(latent_pi)
+        distribution = self._get_action_dist_from_latent(latent_pi)
         log_prob = distribution.log_prob(actions)
         values = self.value_net(latent_vf)
         entropy = distribution.entropy()
@@ -972,7 +1124,9 @@ class ContinuousCritic(BaseModel):
         self.n_critics = n_critics
         self.q_networks: List[nn.Module] = []
         for idx in range(n_critics):
-            q_net_list = create_mlp(features_dim + action_dim, 1, net_arch, activation_fn)
+            q_net_list = create_mlp(
+                features_dim + action_dim, 1, net_arch, activation_fn
+            )
             q_net = nn.Sequential(*q_net_list)
             self.add_module(f"qf{idx}", q_net)
             self.q_networks.append(q_net)

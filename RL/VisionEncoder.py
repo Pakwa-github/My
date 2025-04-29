@@ -259,3 +259,21 @@ def farthest_point_sample(xyz, npoint):
         distance[mask] = dist[mask]
         farthest = torch.max(distance, -1)[1]
     return centroids
+
+
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+import torch as th
+import torch.nn as nn
+
+# 继承 BaseFeaturesExtractor
+class PointNetFeaturesExtractor(BaseFeaturesExtractor):
+    def __init__(self, observation_space, features_dim=1024):
+        # 必须要 super 调用，告知最终输出特征维度
+        super().__init__(observation_space, features_dim)
+        
+        # 这里直接用你原来的 encoder
+        from RL.VisionEncoder import encoder
+        self.encoder = encoder(features_dim).to(th.float32)
+    
+    def forward(self, observations):
+        return self.encoder(observations)

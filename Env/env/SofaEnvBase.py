@@ -131,7 +131,7 @@ class SofaSimEnvBase:
         )
         for i in range(self.config.garment_num):
             delete_prim(f"/World/Garment/garment_{i}")
-        self.config.garment_num = random.choices([5])[0]
+        self.config.garment_num = random.choices([8])[0]
         # self.config.garment_num = random.choices([3, 4, 5], [0.1, 0.45, 0.45])[0]
         print(f"garment_num: {self.config.garment_num}")
         self.wrapgarment = WrapGarment(
