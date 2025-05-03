@@ -95,7 +95,7 @@ class SofaSimEnv(SofaSimEnvBase):
         # self.config.garment_num = random.choices([3, 4, 5], [0.1, 0.45, 0.45])[0]
         if stage == 1:
             self.config.garment_num = 1
-            self.stage1_obs_count = 10
+            self.stage1_obs_count = 16
         elif stage == 2:
             self.config.garment_num = 2
         elif stage == 5:
@@ -179,7 +179,7 @@ class SofaSimEnv(SofaSimEnvBase):
         cprint(f"最终抓取点: {grasp_point}, 得分为 {reward}", "yellow")
         
 
-        if self.config.garment_num == 10:
+        if self.config.garment_num == 1:
             self.stage1_obs_count -= 1
             if self.stage1_obs_count <= 0:
                 self.reset(self.config.garment_num)
@@ -210,7 +210,7 @@ class SofaSimEnv(SofaSimEnvBase):
             reward += -3
             done = False
             obs = self.get_obs()
-            return obs, reward, np.array([done]), {"reason": "cant fetch the point",
+            return obs, reward, done, {"reason": "cant fetch the point",
                                                     "grasp_success": False,
                                                     "dropped": self.dropped}
         # 失败
@@ -230,7 +230,7 @@ class SofaSimEnv(SofaSimEnvBase):
             reward += -3
             done = False
             obs = self.get_obs()
-            return obs, reward, np.array([done]), {"reason": "cant fetch the point",
+            return obs, reward, done, {"reason": "cant fetch the point",
                                                     "grasp_success": False,
                                                     "dropped": self.dropped}
         # 成功
@@ -260,9 +260,10 @@ class SofaSimEnv(SofaSimEnvBase):
         info["dropped"] = self.dropped
         if self.num_garments <= 0 or self.successful_grasps >= self.target_grasp_num or self.fail_num >= 15:
             done = True
-            self.reset(self.config.garment_num)
+        else:
+            done = False
         obs = self.get_obs()
-        return obs, reward, np.array([done]), info
+        return obs, reward, done, info
 
 
     def step2(self, action, eval_succ=False, flag=True):
@@ -286,7 +287,7 @@ class SofaSimEnv(SofaSimEnvBase):
             reward = 10
         self.reset(1)
         obs = self.get_obs()
-        return obs, reward, np.array([done]), info
+        return obs, reward, done, info
 
 
     def step3(self, action, eval_succ=False, flag=False):
@@ -301,7 +302,7 @@ class SofaSimEnv(SofaSimEnvBase):
         cprint(f"最终抓取点: {grasp_point}, 得分为 {reward}", "yellow")
         self.reset(5)
         obs = self.get_obs()
-        return obs, reward, np.array([done]), info
+        return obs, reward, done, info
 
 
     def compute_reward_pick_point(self, grasp_point):

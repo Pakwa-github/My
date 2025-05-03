@@ -186,20 +186,13 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         仅仅是每一步拿 obs；扔进 policy 拿 action；步进环境；累加 reward（用于计算评估指标，比如 success rate）
         sb3没有？
         """
-        # self.reset_env()
-
         self.policy.set_training_mode(False)
-
         n_steps = 0
         success_count = 0
         grasp_fail_count = 0
         dropped = 0
-        # rollout_buffer.reset()
-        # Sample new weights for the state dependent exploration
         if self.use_sde:
             self.policy.reset_noise(num_envs)
-
-        # callback.on_rollout_start()
 
         succ_list = []
 
@@ -219,16 +212,9 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             # Rescale and perform action
             clipped_actions = actions
 
-            new_obs, rewards, dones, infos = self.sim_env.step(clipped_actions, True)
+            new_obs, reward, done, infos = self.sim_env.step(clipped_actions, True)
 
             self.num_timesteps += num_envs
-
-            # Give access to local variables
-            # callback.update_locals(locals())
-            # if not callback.on_step():
-            #     return False
-
-            # self._update_info_buffer(infos, dones)
 
             if infos.get("success", False):
                 success_count += 1
@@ -236,7 +222,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 grasp_fail_count += 1
             dropped += infos.get("dropped", 0)
             n_steps += 1
-            succ_list.append(rewards)
+            succ_list.append(reward)
+
+            if done == True:
+                self.sim_env.reset(self.sim_env.config.garment_num)
 
         succ_rate = sum(succ_list)/len(succ_list)
         cprint(f"n_steps:{n_steps}\nevaluation success rate:{succ_rate}", "green")
@@ -293,6 +282,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             with th.no_grad():
                 # Convert to pytorch tensor or to TensorDict
                 obs_tensor = obs_as_tensor(last_obs, self.device)
+                # unsqueeze()函数起升维的作用,参数表示在哪个地方加一个维度。
+                # 0 在第一个维度(中括号)的每个元素加中括号
                 obs_tensor = obs_tensor.unsqueeze(0)
                 actions, values, log_probs = self.policy(obs_tensor)
             actions = actions.cpu().numpy()
@@ -300,16 +291,20 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             # Rescale and perform action (direct mapping for your task)
             clipped_actions = actions  # # For specific task, no need to clip actions
 
-            new_obs, rewards, dones, infos = self.sim_env.step(clipped_actions, flag=MyFlag)
-            self.step_num += 1
+            new_obs, reward, done, info = self.sim_env.step(clipped_actions, flag=MyFlag)
+            
             self.num_timesteps += num_envs
 
+            # me
+            self.step_num += 1
+
+            # False通常因为回调要求提前停止learn训练
             # Give access to local variables
             callback.update_locals(locals())
             if not callback.on_step():
                 return False
 
-            # self._update_info_buffer(infos, dones) 报错的
+            # self._update_info_buffer(info, done) # 报错的
             n_steps += 1
 
             if isinstance(self.action_space, spaces.Discrete):
@@ -319,11 +314,14 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             rollout_buffer.add(
                 last_obs, 
                 actions,
-                rewards,
-                dones,
+                reward,
+                done,
                 values,
                 log_probs,
             )
+
+            if done == True:
+                self.sim_env.reset(self.sim_env.config.garment_num)
 
         # ！
         with th.no_grad():
@@ -331,8 +329,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))
 
         # 计算 GAE、归一化 return、执行 callback（比如 tensorboard logging）
-        rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
+        rollout_buffer.compute_returns_and_advantage(last_values=values, dones=done)
+
         callback.update_locals(locals())
+
         callback.on_rollout_end()
 
         return True
@@ -401,27 +401,31 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         assert self.env is not None
 
         while self.num_timesteps < total_timesteps:
-            if self.num_timesteps <= total_timesteps: # me
+            
+            # me
+            if self.num_timesteps <= total_timesteps: 
                 MyFlag = True
             else:
                 MyFlag = False
-            continue_training = self.collect_rollouts(self.env.num_envs, callback, self.rollout_buffer, n_rollout_steps=self.n_steps, MyFlag=MyFlag)
 
+            continue_training = self.collect_rollouts(self.env.num_envs, callback, self.rollout_buffer, n_rollout_steps=self.n_steps, MyFlag=MyFlag)
+            
             if not continue_training:
                 break
-
+            
             iteration += 1
             self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
-
+            
             # Display training infos
             if log_interval is not None and iteration % log_interval == 0:
                 assert self.ep_info_buffer is not None
                 self._dump_logs(iteration)
 
+            # me
             rollout_data = self.get_rollout_data()
-
             self.train(rollout_data)
             
+            # me ？
             print("training iteration finish:", iteration)
             if self.num_timesteps % (log_interval * self.n_steps) < self.n_steps:
                 elapsed = time.time() - start_time
@@ -601,11 +605,6 @@ class PPO(OnPolicyAlgorithm):
     def _setup_model(self) -> None:
         super()._setup_model()
 
-
-        # 初始化学习率调度器
-        """ cursor 作用是？"""
-        # self.lr_schedule = get_schedule_fn(self.learning_rate)
-
         # Initialize schedules for policy/value clipping
         self.clip_range = get_schedule_fn(self.clip_range)
         if self.clip_range_vf is not None:
@@ -653,8 +652,8 @@ class PPO(OnPolicyAlgorithm):
                 actions = actions.long().flatten()
 
             # Re-sample the noise matrix because the log_std has changed
-            if self.use_sde:
-                self.policy.reset_noise(self.batch_size)
+            # if self.use_sde:
+            #     self.policy.reset_noise(self.batch_size)
 
             values, log_prob, entropy = self.policy.evaluate_actions(observations, actions)
             values = values.flatten()

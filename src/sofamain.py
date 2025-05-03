@@ -100,7 +100,7 @@ def init():
         ent_coef=0.005, # 熵系数 0.01 ～ 0.001 原本是0.01
         vf_coef=0.5,  # 价值函数损失的权重
         max_grad_norm=0.5,
-        tensorboard_log="./tsb/newPPO425",
+        tensorboard_log="./tsb/PPO_503",
         verbose=1,
         # policy_kwargs=policy_kwargs,
         device="cuda:0", 
@@ -149,7 +149,7 @@ def save(
 
 if __name__ == "__main__":
     
-    mode = "eval"
+    mode = "train"
     assert mode in ["train", "eval", "retrain", "sb3", "trainA2C", "evalA2C"]
     cprint(f"当前mode {mode}", "green")
 
@@ -167,10 +167,10 @@ if __name__ == "__main__":
             print("⚠️ Training interrupted by error:", e)
             print("🔁 Saving model before exit...")
             cprint(model.step_num, "green")
-            save(model, "./model/newppo_mid.zip")
+            save(model, "./model_2/newppo_mid.zip")
             raise
         print("success Saving model...")
-        save(model, "./model/newppo_fin.zip")
+        save(model, "./model_2/newppo_fin.zip")
 
     elif mode == "retrain":
     

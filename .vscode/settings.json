@@ -737,7 +737,7 @@
     // We use "black" as a formatter:
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter",
-        "editor.formatOnSave": true
+        // "editor.formatOnSave": true  // 自动更改格式
       },
 
     // Use flake8 for linting

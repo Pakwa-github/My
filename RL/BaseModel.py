@@ -375,6 +375,7 @@ class BasePolicy(BaseModel, ABC):
     def init_weights(module: nn.Module, gain: float = 1) -> None:
         """
         Orthogonal initialization (used in PPO and A2C)
+        对线性层或卷积层进行正交初始化（PPO/A2C 常用）
         """
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             nn.init.orthogonal_(module.weight, gain=gain)
@@ -535,6 +536,26 @@ class ActorCriticPolicy(BasePolicy):
         ``th.optim.Adam`` by default
     :param optimizer_kwargs: Additional keyword arguments,
         excluding the learning rate, to pass to the optimizer
+
+    Actor-Critic 算法的策略类（包含策略和价值预测）。用于 A2C、PPO 等算法。
+    :param observation_space: 观察空间
+    :param action_space: 动作空间
+    :param lr_schedule: 学习率调度（可以为常量）
+    :param net_arch: 策略和价值网络的规范。
+    :param activation_fn: 激活函数
+    :param ortho_init: 是否使用正交初始化
+    :param use_sde: 是否使用状态依赖探索
+    :param log_std_init: 对数标准差的初始值
+    :param full_std: 使用 gSDE 时，是否使用 (n_features x n_actions) 个参数作为标准差，而不是仅使用 (n_features,)
+    :param use_expln: 使用 ``expln()`` 函数而不是 ``exp()`` 函数来确保
+        正标准差（参见论文）。这可以使方差保持在零以上，并防止其增长过快。实际上，``exp()`` 通常就足够了。
+    :param squash_output: 是否使用 tanh 函数压缩输出，这可以在使用 gSDE 时确保边界。
+    :param features_extractor_class：要使用的特征提取器。
+    :param features_extractor_kwargs：传递给特征提取器的关键字参数。
+    :param share_features_extractor：如果为 True，则特征提取器在策略网络和价值网络之间共享。
+    :param normalize_images：是否对图像进行归一化，除以 255.0（默认为 True）
+    :param optimizer_class：要使用的优化器，默认为 ``th.optim.Adam``
+    :param optimizer_kwargs：传递给优化器的附加关键字参数，不包括学习率
     """
 
     def __init__(
@@ -628,18 +649,15 @@ class ActorCriticPolicy(BasePolicy):
         self.dist_kwargs = dist_kwargs
 
         # Action distribution
-        self.action_dist = make_proba_distribution(
-            action_space, use_sde=use_sde, dist_kwargs=dist_kwargs
-        )
+        self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
+
+        self._build(lr_schedule)
 
         # !me
         from RL.VisionEncoder import encoder, sem_model
-
         self.encoder = encoder(1024).to(self.device)
         self.sem_encoder = sem_model(1, init_pts=256).to(self.device)
         self.norm = nn.Tanh()
-
-        self._build(lr_schedule)
 
     def _get_constructor_parameters(self) -> Dict[str, Any]:
         data = super()._get_constructor_parameters()
@@ -686,6 +704,7 @@ class ActorCriticPolicy(BasePolicy):
         #       really contain any layers (acts like an identity module).
         self.mlp_extractor = MlpExtractor(
             1024,  # ！me
+            # self.features_dim,
             net_arch=self.net_arch,
             activation_fn=self.activation_fn,
             device=self.device,
@@ -765,6 +784,7 @@ class ActorCriticPolicy(BasePolicy):
         """
         # Preprocess the observation if needed
         features = self.encoder(obs)  # ！me
+        # features = self.extract_features(obs)
         if self.share_features_extractor:
             latent_pi, latent_vf = self.mlp_extractor(features)
         else:
@@ -886,6 +906,11 @@ class ActorCriticPolicy(BasePolicy):
         :param actions: Actions
         :return: estimated value, log likelihood of taking those actions
             and entropy of the action distribution.
+
+        根据当前策略，根据观察结果评估行动。
+        :param obs: 观察值
+        :param actions: 行动
+        :return: 估计值，采取这些行动的对数似然值 以及行动分布的熵。
         """
         # Preprocess the observation if needed
         features = self.encoder(obs)  # !me
@@ -919,8 +944,15 @@ class ActorCriticPolicy(BasePolicy):
         :param obs: Observation
         :return: the estimated values.
         """
-        features = super().extract_features(obs, self.vf_features_extractor)
-        latent_vf = self.mlp_extractor.forward_critic(features)
+        # me!
+        features = self.encoder(obs)
+        if self.share_features_extractor:
+            latent_vf = self.mlp_extractor.forward_critic(features)
+        else:
+            _, vf_features = features
+            latent_vf = self.mlp_extractor.forward_critic(vf_features)
+        # features = super().extract_features(obs, self.vf_features_extractor)
+        # latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
 
 
