@@ -326,9 +326,12 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         # ！
         with th.no_grad():
             # Compute value for the last timestep
-            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))
+            obs_tensor = obs_as_tensor(new_obs, self.device)
+            obs_tensor = obs_tensor.unsqueeze(0)
+            values = self.policy.predict_values(obs_tensor)
 
-        # 计算 GAE、归一化 return、执行 callback（比如 tensorboard logging）
+        # 计算 GAE、归一化 return、执行 callback（比如 tensorboard logging)
+        done = np.array(done)
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=done)
 
         callback.update_locals(locals())

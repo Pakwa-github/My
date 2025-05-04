@@ -1,5 +1,5 @@
 from isaacsim import SimulationApp
-hl = False
+hl = True
 simulation_app = SimulationApp({"headless": hl})
 
 
@@ -182,7 +182,7 @@ class SofaSimEnv(SofaSimEnvBase):
         if self.config.garment_num == 1:
             self.stage1_obs_count -= 1
             if self.stage1_obs_count <= 0:
-                self.reset(self.config.garment_num)
+                done = True
             obs = self.get_obs()
             return obs, reward, np.array([done]), {"reason": "stage1 - only point identification"}
         

@@ -802,6 +802,12 @@ class ActorCriticPolicy(BasePolicy):
         actions_scaled = actions.clone()
         actions_scaled[..., 0:2] *= 0.5  # 前两个动作乘0.5 → [-0.5, 0.5]
         actions_scaled[..., 2] *= 0.2  # 第三个动作乘0.2 → [-0.2, 0.2]
+        # print("---")
+        # print("原始 actions 范围：", actions.min().item(), actions.max().item())
+        # print("动作维度：", actions.shape)
+        # print("动作示例：", actions[:10])
+        # print(actions)
+        # print(actions_scaled)
         # me!
         return actions_scaled, values, log_prob
 
