@@ -1,5 +1,5 @@
 from isaacsim import SimulationApp
-hl = True
+hl = False
 simulation_app = SimulationApp({"headless": hl})
 
 

@@ -12,7 +12,7 @@ import torch
 import yaml
 from RL.MyPPO import PPO
 from RL.RLEnv import RlEnvBase
-# from RL.SaveModel import custom_load, save
+# from RL.SaveModel import save
 # from RL.SimEnv import SimEnv
 # from RL.TaskDefine import FoldTask
 import carb
@@ -45,68 +45,6 @@ def make_sim_env():
     from RL.SofaSimEnv import SofaSimEnv
     env = SofaSimEnv()
     return env
-
-
-def returnA2C():
-    env = SofaSimEnv()
-    rl_env = RlEnvBase(headless=False)
-    rl_env.set_task(MyTask(), backend="torch")
-    model = MyA2C(
-        policy="MlpPolicy",
-        sim_env=env,
-        env=rl_env,
-        learning_rate=7e-4,
-        n_steps=8,
-        gamma=0.99,
-        normalize_advantage=True,
-        gae_lambda=1.0,
-        ent_coef=0.005,
-        vf_coef=0.5,
-        max_grad_norm=0.5,
-        tensorboard_log="./tsb/SofaGrasp_A2C",
-        verbose=1,
-        device="cuda:0",
-    )
-    return model, env
-
-def init():
-    # 初始化环境
-    env = SofaSimEnv()
-    # env.get_obs()
-    rl_env = RlEnvBase(headless=False)
-    rl_env.set_task(MyTask(), backend="torch")
-
-    # 在初始化环境后启动新线程显示RGB图像
-    import threading
-    display_thread = threading.Thread(target=rgb_periodic_saver, args=(env.point_cloud_camera,))
-    display_thread.daemon = True
-    # display_thread.start()
-    
-    from RL.VisionEncoder import PointNetFeaturesExtractor
-    policy_kwargs = dict(
-        features_extractor_class=PointNetFeaturesExtractor,
-        features_extractor_kwargs=dict(features_dim=1024)
-    )
-    model = PPO(
-        policy="MlpPolicy",
-        sim_env=env,
-        env=rl_env,
-        learning_rate=1e-4,
-        n_steps=8,     # 一次rollout 走16步 感觉不够啊
-        batch_size=8,  # 每次更新中使用的样本数量
-        n_epochs=3,     # 一个batch批次内进行优化轮次的数量 1
-        gamma=0.99,
-        normalize_advantage=True,   # 是否对优势进行归一化
-        ent_coef=0.005, # 熵系数 0.01 ～ 0.001 原本是0.01
-        vf_coef=0.5,  # 价值函数损失的权重
-        max_grad_norm=0.5,
-        tensorboard_log="./tsb/PPO_507",
-        verbose=1,
-        # policy_kwargs=policy_kwargs,
-        device="cuda:0", 
-    )
-    
-    return model, env
 
 def save(
     model:PPO,
@@ -147,14 +85,75 @@ def save(
     params_to_save = model.get_parameters()
     torch.save(params_to_save, path)
 
+def A2Cinit():
+    sim_env = SofaSimEnv()
+    rl_env = RlEnvBase(headless=False)
+    rl_env.set_task(MyTask(), backend="torch")
+    model = MyA2C(
+        policy="MlpPolicy",
+        sim_env=sim_env,
+        env=rl_env,
+        learning_rate=7e-4,
+        n_steps=8,
+        gamma=0.99,
+        normalize_advantage=True,
+        gae_lambda=1.0,
+        ent_coef=0.005,
+        vf_coef=0.5,
+        max_grad_norm=0.5,
+        tensorboard_log="./tsb/SofaGrasp_A2C",
+        verbose=1,
+        device="cuda:0",
+    )
+    return model, sim_env
+
+def PPOinit():
+    # 初始化环境
+    env = SofaSimEnv()
+    # env.get_obs()
+    rl_env = RlEnvBase(headless=False)
+    rl_env.set_task(MyTask(), backend="torch")
+
+    # 在初始化环境后启动新线程显示RGB图像
+    import threading
+    display_thread = threading.Thread(target=rgb_periodic_saver, args=(env.point_cloud_camera,))
+    display_thread.daemon = True
+    # display_thread.start()
+    
+    from RL.VisionEncoder import PointNetFeaturesExtractor
+    policy_kwargs = dict(
+        features_extractor_class=PointNetFeaturesExtractor,
+        features_extractor_kwargs=dict(features_dim=1024)
+    )
+    model = PPO(
+        policy="MlpPolicy",
+        sim_env=env,
+        env=rl_env,
+        learning_rate=1e-4,
+        n_steps=8,     # 一次rollout 走16步 感觉不够啊
+        batch_size=8,  # 每次更新中使用的样本数量
+        n_epochs=3,     # 一个batch批次内进行优化轮次的数量 1
+        gamma=0.99,
+        normalize_advantage=True,   # 是否对优势进行归一化
+        ent_coef=0.005, # 熵系数 0.01 ～ 0.001 原本是0.01
+        vf_coef=0.5,  # 价值函数损失的权重
+        max_grad_norm=0.5,
+        tensorboard_log="./tsb/PPO_507",
+        verbose=1,
+        # policy_kwargs=policy_kwargs,
+        device="cuda:0", 
+    )
+    
+    return model, env
+
 if __name__ == "__main__":
     
-    mode = "retrain"
+    mode = "train"
     assert mode in ["train", "eval", "retrain", "sb3", "trainA2C", "evalA2C"]
     cprint(f"当前mode {mode}", "green")
 
     if mode == "train":
-        model, env = init()
+        model, env = PPOinit()
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
         monitor_thread.daemon = True
         monitor_thread.start()
@@ -175,8 +174,8 @@ if __name__ == "__main__":
     elif mode == "retrain":
     
         print("🪄 从断点恢复训练")
-        model, env = init()
-        loaded_data = torch.load("./model_3/noencoder_312.zip")
+        model, env = PPOinit()
+        loaded_data = torch.load("./model_3/noencoder_336.zip")
         model.policy.load_state_dict(loaded_data["policy"])
 
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
@@ -185,7 +184,7 @@ if __name__ == "__main__":
         cprint("\nReTraining model...\n\nReTraining model...\n\nReTraining model...\n", "red")
         try:
             env.reset(5)
-            model.learn(total_timesteps=120)
+            model.learn(total_timesteps=80)
         except Exception as e:
             print("⚠️ Training interrupted by error:", e)
             print("🔁 Saving model before exit...")
@@ -197,9 +196,9 @@ if __name__ == "__main__":
 
     elif mode == "eval":
         # 加载模型进行评估
-        model, env = init()
-        env.reset(8)
-        loaded_data = torch.load("./model/GL_ppo1000.zip")
+        model, env = PPOinit()
+        env.reset(5)
+        loaded_data = torch.load("./model_3/noencoder_408.zip")
         model.policy.load_state_dict(loaded_data["policy"])
         model.eval_policy(num_envs=1, n_rollout_steps=30)
 
@@ -213,7 +212,7 @@ if __name__ == "__main__":
 
     elif mode == "trainA2C":
         
-        model, _ = returnA2C()
+        model, sim_env = A2Cinit()
         loaded_data = torch.load("./model/A2C_572.zip")
         model.policy.load_state_dict(loaded_data["policy"])
 
@@ -237,7 +236,7 @@ if __name__ == "__main__":
 
     elif mode == "evalA2C":
         # 加载模型进行评估
-        model, _ = returnA2C()
+        model, sim_env = A2Cinit()
         # loaded_data = torch.load("./model/A2C_500?.zip")
         # model.policy.load_state_dict(loaded_data["policy"])
         model.eval_policy(num_envs=1, n_rollout_steps=30)

@@ -113,41 +113,41 @@ class Point_Cloud_Camera:
 
 
 
-        # load model
-        self.model = Aff_Model(normal_channel=False).cuda()
-        if self.retrieve_model_path is None:
-            self.model.load_state_dict(
-                torch.load("Model/sofa_retrieve_model_finetuned.pth")
-            )
-        else:
-            self.model.load_state_dict(torch.load(self.retrieve_model_path))
-        self.model.eval()
+        # # load model
+        # self.model = Aff_Model(normal_channel=False).cuda()
+        # if self.retrieve_model_path is None:
+        #     self.model.load_state_dict(
+        #         torch.load("Model/sofa_retrieve_model_finetuned.pth")
+        #     )
+        # else:
+        #     self.model.load_state_dict(torch.load(self.retrieve_model_path))
+        # self.model.eval()
 
 
 
 
-        # load place model
-        self.place_model = Place_Model(normal_channel=False).cuda()
-        if self.place_model_path is None:
-            self.place_model.load_state_dict(
-                torch.load("Model/sofa_place_model_finetuned.pth")
-            )
-        else:
-            self.place_model.load_state_dict(torch.load(self.place_model_path))
-        self.place_model.eval()
+        # # load place model
+        # self.place_model = Place_Model(normal_channel=False).cuda()
+        # if self.place_model_path is None:
+        #     self.place_model.load_state_dict(
+        #         torch.load("Model/sofa_place_model_finetuned.pth")
+        #     )
+        # else:
+        #     self.place_model.load_state_dict(torch.load(self.place_model_path))
+        # self.place_model.eval()
 
 
 
 
 
-        self.pick_model = Pick_Model(normal_channel=False).cuda()
-        if self.pick_model_path is None:
-            self.pick_model.load_state_dict(
-                torch.load("Model/sofa_pick_model_finetuned.pth")
-            )
-        else:
-            self.pick_model.load_state_dict(torch.load(self.pick_model_path))
-        self.pick_model.eval()
+        # self.pick_model = Pick_Model(normal_channel=False).cuda()
+        # if self.pick_model_path is None:
+        #     self.pick_model.load_state_dict(
+        #         torch.load("Model/sofa_pick_model_finetuned.pth")
+        #     )
+        # else:
+        #     self.pick_model.load_state_dict(torch.load(self.pick_model_path))
+        # self.pick_model.eval()
 
 
 
