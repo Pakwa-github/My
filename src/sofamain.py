@@ -100,7 +100,7 @@ def init():
         ent_coef=0.005, # 熵系数 0.01 ～ 0.001 原本是0.01
         vf_coef=0.5,  # 价值函数损失的权重
         max_grad_norm=0.5,
-        tensorboard_log="./tsb/PPO_504",
+        tensorboard_log="./tsb/PPO_507",
         verbose=1,
         # policy_kwargs=policy_kwargs,
         device="cuda:0", 
@@ -149,7 +149,7 @@ def save(
 
 if __name__ == "__main__":
     
-    mode = "train"
+    mode = "retrain"
     assert mode in ["train", "eval", "retrain", "sb3", "trainA2C", "evalA2C"]
     cprint(f"当前mode {mode}", "green")
 
@@ -162,21 +162,21 @@ if __name__ == "__main__":
         cprint("\nTraining model...\n\nTraining model...\n\nTraining model...\n", "red")
         try:
             env.reset(5)
-            model.learn(total_timesteps=200)
+            model.learn(total_timesteps=160)
         except Exception as e:
             print("⚠️ Training interrupted by error:", e)
             print("🔁 Saving model before exit...")
             cprint(model.step_num, "green")
-            save(model, "./model_2/newppo_mid.zip")
+            save(model, "./model_3/newppo_mid.zip")
             raise
         print("success Saving model...")
-        save(model, "./model_2/newppo_fin.zip")
+        save(model, "./model_3/newppo_fin.zip")
 
     elif mode == "retrain":
     
         print("🪄 从断点恢复训练")
         model, env = init()
-        loaded_data = torch.load("./model_2/stage2_80.zip")
+        loaded_data = torch.load("./model_3/noencord_64.zip")
         model.policy.load_state_dict(loaded_data["policy"])
 
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
@@ -184,16 +184,16 @@ if __name__ == "__main__":
         monitor_thread.start()
         cprint("\nReTraining model...\n\nReTraining model...\n\nReTraining model...\n", "red")
         try:
-            env.reset(2)
-            model.learn(total_timesteps=120)
+            env.reset(5)
+            model.learn(total_timesteps=96)
         except Exception as e:
             print("⚠️ Training interrupted by error:", e)
             print("🔁 Saving model before exit...")
             cprint(model.step_num, "green")
-            save(model, "./model_2/GL_mid.zip")
+            save(model, "./model_3/GL_mid.zip")
             raise
         print("Saving model...")
-        save(model, "./model_2/GL_fin.zip")
+        save(model, "./model_3/GL_fin.zip")
 
     elif mode == "eval":
         # 加载模型进行评估

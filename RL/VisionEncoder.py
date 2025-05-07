@@ -104,12 +104,16 @@ class sem_model(nn.Module):
 class encoder(nn.Module):
     def __init__(self,num_class,normal_channel=False,pts_list=[512,256,64]):
         super(encoder, self).__init__()
-        self.dtype = torch.float32
-        in_channel = 4 if normal_channel else 3
+        self.dtype = torch.float32                  # 定义数据类型
+        in_channel = 4 if normal_channel else 3     # 如果带法线信息就是 4 维，否则就是 3 维
         self.normal_channel = normal_channel
+        # Set Abstraction 1：采样512个点，每个点查找半径0.02内16个邻居，特征维度从 in_channel 到 128
         self.sa1 = PointNetSetAbstraction(npoint=pts_list[0], radius=0.02, nsample=16, in_channel=in_channel, mlp=[64, 64, 128], group_all=False).to(self.dtype)
+        # Set Abstraction 2：采样256个点，每个点查找半径0.05内32个邻居，特征维度从128+3到256
         self.sa2 = PointNetSetAbstraction(npoint=pts_list[1], radius=0.05, nsample=32, in_channel=128 + 3, mlp=[128, 128, 256], group_all=False).to(self.dtype)
+        # Set Abstraction 4：全局聚合所有点，特征维度从256+3到1024
         self.sa4 = PointNetSetAbstraction(npoint=None, radius=None, nsample=None, in_channel=256 + 3, mlp=[256, 512, 1024], group_all=True).to(self.dtype)
+        # 全连接层：1024 → 512 → 256 → num_class
         self.fc1 = nn.Linear(1024, 512).to(self.dtype)
         self.drop1 = nn.Dropout(0.4)
         self.fc2 = nn.Linear(512, 256).to(self.dtype)
@@ -119,7 +123,7 @@ class encoder(nn.Module):
 
     def forward(self, xyz):
         xyz = xyz.to(self.dtype)
-        B, N, D = xyz.shape
+        B, N, D = xyz.shape     # batch 大小, 点数, 维度
         if self.normal_channel:
             norm = xyz[:, :, 3:].reshape(B,-1,N)
             xyz = xyz[:, :, :3]
@@ -128,15 +132,24 @@ class encoder(nn.Module):
         l1_xyz, l1_points = self.sa1(xyz, norm)
         l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)
         l3_xyz, l3_points = self.sa4(l2_xyz, l2_points)
-        # l4_xyz, l4_points = self.sa4(l3_xyz, l3_points)
         x = l3_points.view(B, 1024)
         x = F.relu(self.fc1(x))
+        x = self.drop1(x)
         x = F.relu(self.fc2(x))
+        x = self.drop2(x)
         x = self.fc3(x)
 
         return x
 
 class PointNetSetAbstraction(nn.Module):
+    """
+    它实现了 PointNet++ 中的Set Abstraction Layer（集合抽象层）
+    核心作用：
+        对点云采样
+        邻域分组
+        用 MLP 提取局部特征
+        聚合特征
+    """
     def __init__(self, npoint, radius, nsample, in_channel, mlp, group_all, batch_norm = False):
         super(PointNetSetAbstraction, self).__init__()
         self.npoint = npoint
@@ -156,14 +169,14 @@ class PointNetSetAbstraction(nn.Module):
 
     def forward(self, xyz, points):
         if points is not None:
-            points = points.permute(0, 2, 1)
+            points = points.permute(0, 2, 1)    # 如果有特征，把 (B, D, N) → (B, N, D)
 
         if self.group_all:
             new_xyz, new_points = sample_and_group_all(xyz, points)
         else:
             new_xyz, new_points = sample_and_group(self.npoint, self.radius, self.nsample, xyz, points)
-        new_points = new_points.permute(0, 3, 2, 1)
-        for i, conv in enumerate(self.mlp_convs):
+        new_points = new_points.permute(0, 3, 2, 1)     # 变成 (B, C+D, nsample, npoint)
+        for i, conv in enumerate(self.mlp_convs): 
             bn = self.mlp_bns[i]
             x=conv(new_points)
             new_points =  F.relu(bn(x))

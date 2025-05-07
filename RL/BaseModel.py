@@ -574,7 +574,7 @@ class ActorCriticPolicy(BasePolicy):
         features_extractor_class: Type[BaseFeaturesExtractor] = FlattenExtractor,
         features_extractor_kwargs: Optional[Dict[str, Any]] = None,
         share_features_extractor: bool = True,
-        normalize_images: bool = True,
+        normalize_images: bool = False,  # me!
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
     ):
@@ -655,7 +655,9 @@ class ActorCriticPolicy(BasePolicy):
 
         # !me
         from RL.VisionEncoder import encoder, sem_model
-        self.encoder = encoder(1024).to(self.device)
+        from RL.EmptyEncoder import EmptyEncoder
+        self.encoder = EmptyEncoder(1024).to(self.device)
+        # self.encoder = encoder(1024).to(self.device)
         self.sem_encoder = sem_model(1, init_pts=256).to(self.device)
         self.norm = nn.Tanh()
 
@@ -920,6 +922,7 @@ class ActorCriticPolicy(BasePolicy):
         """
         # Preprocess the observation if needed
         features = self.encoder(obs)  # !me
+        # features = self.extract_features(obs)
         if self.share_features_extractor:
             latent_pi, latent_vf = self.mlp_extractor(features)
         else:
@@ -957,6 +960,7 @@ class ActorCriticPolicy(BasePolicy):
         else:
             _, vf_features = features
             latent_vf = self.mlp_extractor.forward_critic(vf_features)
+
         # features = super().extract_features(obs, self.vf_features_extractor)
         # latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
