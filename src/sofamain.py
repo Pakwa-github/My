@@ -176,7 +176,7 @@ if __name__ == "__main__":
     
         print("🪄 从断点恢复训练")
         model, env = init()
-        loaded_data = torch.load("./model_3/noencord_64.zip")
+        loaded_data = torch.load("./model_3/noencoder_312.zip")
         model.policy.load_state_dict(loaded_data["policy"])
 
         monitor_thread = threading.Thread(target=monitor_training, args=(model, 200))
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         cprint("\nReTraining model...\n\nReTraining model...\n\nReTraining model...\n", "red")
         try:
             env.reset(5)
-            model.learn(total_timesteps=96)
+            model.learn(total_timesteps=120)
         except Exception as e:
             print("⚠️ Training interrupted by error:", e)
             print("🔁 Saving model before exit...")
